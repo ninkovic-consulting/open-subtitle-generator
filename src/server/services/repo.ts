@@ -41,6 +41,11 @@ export function toJob(row: JobRow, media?: Pick<MediaRow, 'fileName' | 'path' | 
     translateModel: row.translateModel,
     options: (row.options ?? {}) as JobOptions,
     outputPath: row.outputPath,
+    outputPaths: ((row.outputPaths ?? []) as string[]).length
+      ? (row.outputPaths as string[])
+      : row.outputPath
+        ? [row.outputPath]
+        : [],
     outputEncoding: row.outputEncoding,
     costUsd: row.costUsd,
     tokensIn: row.tokensIn,
@@ -159,16 +164,12 @@ export function getProject(id: number): Project | null {
 /** Subtitle files OSG wrote itself for a video; they are not "existing subtitles". */
 export function osgOutputPaths(mediaFileId: number): Set<string> {
   const rows = getDb()
-    .select({ p: schema.jobs.outputPath })
+    .select({ p: schema.jobs.outputPath, all: schema.jobs.outputPaths })
     .from(schema.jobs)
     .where(eq(schema.jobs.mediaFileId, mediaFileId))
     .all();
-  return new Set(
-    rows
-      .map((r) => r.p)
-      .filter((p): p is string => !!p)
-      .map((p) => path.resolve(p)),
-  );
+  const files = rows.flatMap((r) => [r.p, ...((r.all ?? []) as string[])]);
+  return new Set(files.filter((p): p is string => !!p).map((p) => path.resolve(p)));
 }
 
 /** Sidecar subtitles next to a video, excluding files OSG generated. */

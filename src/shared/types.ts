@@ -11,7 +11,7 @@ export const JOB_STAGES = [
 ] as const;
 export const TIMING_SOURCES = ['stt', 'sidecar_srt', 'embedded_srt'] as const;
 export const ENCODINGS = ['utf8-bom', 'utf8', 'legacy'] as const;
-export const NAMINGS = ['lang-suffix', 'plain'] as const;
+export const NAMINGS = ['lang-suffix', 'plain', 'both'] as const;
 export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'] as const;
 export const PROVIDER_KINDS = ['openrouter', 'custom'] as const;
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -301,6 +301,8 @@ export interface Job {
   translateModel: string | null;
   options: JobOptions;
   outputPath: string | null;
+  /** Every subtitle file this job wrote (two with the "both" naming). */
+  outputPaths: string[];
   outputEncoding: string | null;
   costUsd: number;
   tokensIn: number;
@@ -366,6 +368,8 @@ export const exportSchema = z.object({
   encoding: z.enum(ENCODINGS).optional(),
   naming: z.enum(NAMINGS).optional(),
   overwrite: z.boolean().default(true),
+  /** Delete files this job wrote earlier under another name (e.g. after switching naming). */
+  replacePrevious: z.boolean().default(true),
 });
 
 export const retranslateSchema = z.object({
@@ -497,6 +501,7 @@ export interface FsSearchResponse {
 
 export interface DeleteSubtitleResponse {
   deletedFile: string | null;
+  deletedFiles: string[];
   jobRemoved: boolean;
 }
 

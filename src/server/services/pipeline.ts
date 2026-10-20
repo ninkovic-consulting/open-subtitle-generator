@@ -506,9 +506,11 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
       targetLang: initial.targetLang,
       encoding,
       naming,
-      overwrite: true, // existence was checked at the start of the job
+      overwrite, // the primary file's existence was checked at the start of the job
       protectedPaths: protectedPath ? [protectedPath] : [],
+      ownPaths: [...(getJob(jobId)?.outputPaths ?? []), outPath],
     });
+    for (const note of written.skipped) log('warn', note);
     if (written.fellBack)
       log(
         'warn',
@@ -516,13 +518,14 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
       );
     log(
       'info',
-      `Wrote ${path.basename(written.path)} (${written.encoding}, ${finalCues.length} cues)`,
+      `Wrote ${written.paths.map((p) => path.basename(p)).join(' and ')} (${written.encoding}, ${finalCues.length} cues)`,
     );
     const done = updateJob(jobId, {
       status: 'done',
       stage: 'write',
       progress: 1,
       outputPath: written.path,
+      outputPaths: written.paths,
       outputEncoding: written.encoding,
       finishedAt: Date.now(),
     });

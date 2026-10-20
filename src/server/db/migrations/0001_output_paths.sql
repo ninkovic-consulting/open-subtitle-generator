@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `output_paths` text DEFAULT '[]' NOT NULL;

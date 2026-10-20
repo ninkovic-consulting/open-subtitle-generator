@@ -172,13 +172,21 @@ export const api = {
   ) => request<{ cue: Cue }>('PATCH', `/api/cues/${id}`, { body: patch }),
   exportJob: (
     id: number,
-    body: { encoding?: OutputEncoding; naming?: Naming; overwrite?: boolean },
+    body: {
+      encoding?: OutputEncoding;
+      naming?: Naming;
+      overwrite?: boolean;
+      replacePrevious?: boolean;
+    },
   ) =>
-    request<{ path: string; encoding: string; fellBack: boolean }>(
-      'POST',
-      `/api/jobs/${id}/export`,
-      { body },
-    ),
+    request<{
+      path: string;
+      paths: string[];
+      skipped: string[];
+      removed: string[];
+      encoding: string;
+      fellBack: boolean;
+    }>('POST', `/api/jobs/${id}/export`, { body }),
   retranslate: (
     id: number,
     body: { cueIds?: number[]; targetLang?: string; translateModel?: string; options?: JobOptions },

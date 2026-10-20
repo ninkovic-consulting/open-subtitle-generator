@@ -54,6 +54,7 @@ export const jobs = sqliteTable(
     translateModel: text('translate_model'),
     options: text('options', { mode: 'json' }).notNull().default('{}'),
     outputPath: text('output_path'),
+    outputPaths: text('output_paths', { mode: 'json' }).notNull().default('[]'),
     outputEncoding: text('output_encoding'),
     costUsd: real('cost_usd').notNull().default(0),
     tokensIn: integer('tokens_in').notNull().default(0),

@@ -27,7 +27,7 @@ import { estimateCost } from '../services/cost.js';
 import { bus } from '../services/events.js';
 import { commonDirectory, resolveUserPath } from '../services/fs-browser.js';
 import { logJob } from '../services/joblog.js';
-import { findSidecars, isVideoFile, probe } from '../services/media.js';
+import { isVideoFile, probe } from '../services/media.js';
 import { getModelPricing } from '../services/models.js';
 import type { JobQueue } from '../services/queue.js';
 import {
@@ -401,12 +401,9 @@ export async function jobRoutes(app: FastifyInstance, opts: { queue: JobQueue })
     const job = getJob(id) ?? notFound('Job');
     const sub = getSubtitle(id, 'translated') ?? notFound('Translated subtitle');
     const settings = loadSettings();
-    const sidecars =
-      job.timingSource === 'sidecar_srt'
-        ? findSidecars(job.filePath)
-            .map((s) => s.path)
-            .filter((p) => p !== job.outputPath)
-        : [];
+    // Subtitle files OSG did not write (the user's own, or the timing source) are never replaced.
+    const external = externalSidecars(job.filePath, job.mediaFileId).map((s) => s.path);
+    const previous = job.outputPaths;
     const written = writeSubtitleFile({
       videoPath: job.filePath,
       cues: sub.cues,
@@ -414,11 +411,43 @@ export async function jobRoutes(app: FastifyInstance, opts: { queue: JobQueue })
       encoding: body.encoding ?? job.options.encoding ?? settings.encoding,
       naming: body.naming ?? job.options.naming ?? settings.naming,
       overwrite: body.overwrite,
-      protectedPaths: sidecars,
+      protectedPaths: external,
+      ownPaths: previous,
     });
-    updateJob(id, { outputPath: written.path, outputEncoding: written.encoding });
-    logJob(id, 'info', 'write', `Exported ${path.basename(written.path)} (${written.encoding})`);
-    return { path: written.path, encoding: written.encoding, fellBack: written.fellBack };
+    const removed: string[] = [];
+    if (body.replacePrevious) {
+      const keep = new Set(written.paths.map((p) => path.resolve(p)));
+      for (const old of previous) {
+        const abs = path.resolve(old);
+        const safe =
+          path.extname(abs).toLowerCase() === '.srt' &&
+          path.dirname(abs) === path.dirname(path.resolve(job.filePath));
+        if (!keep.has(abs) && safe && fs.existsSync(abs)) {
+          fs.unlinkSync(abs);
+          removed.push(path.basename(abs));
+        }
+      }
+    }
+    updateJob(id, {
+      outputPath: written.path,
+      outputPaths: written.paths,
+      outputEncoding: written.encoding,
+    });
+    logJob(
+      id,
+      'info',
+      'write',
+      `Saved ${written.paths.map((p) => path.basename(p)).join(' and ')} (${written.encoding})${removed.length ? `; removed ${removed.join(', ')}` : ''}`,
+    );
+    for (const note of written.skipped) logJob(id, 'warn', 'write', note);
+    return {
+      path: written.path,
+      paths: written.paths,
+      skipped: written.skipped,
+      removed,
+      encoding: written.encoding,
+      fellBack: written.fellBack,
+    };
   });
 
   app.post('/api/jobs/:id/retranslate', async (req) => {
@@ -477,35 +506,54 @@ export async function jobRoutes(app: FastifyInstance, opts: { queue: JobQueue })
     const job = getJob(id) ?? notFound('Job');
     if (job.status === 'running' || job.status === 'queued')
       throw new HttpError(409, 'Cancel the job before deleting its subtitles');
-    let deletedFile: string | null = null;
-    if (job.outputPath) {
-      const out = path.resolve(job.outputPath);
-      const safe =
-        path.extname(out).toLowerCase() === '.srt' &&
-        path.dirname(out) === path.dirname(path.resolve(job.filePath));
-      if (!safe) throw new HttpError(400, 'Refusing to delete a file outside the video folder');
+    const deleted: string[] = [];
+    const videoDir = path.dirname(path.resolve(job.filePath));
+    for (const file of new Set([...job.outputPaths, ...(job.outputPath ? [job.outputPath] : [])])) {
+      const out = path.resolve(file);
+      if (path.extname(out).toLowerCase() !== '.srt' || path.dirname(out) !== videoDir) {
+        throw new HttpError(400, 'Refusing to delete a file outside the video folder');
+      }
       if (fs.existsSync(out)) {
         fs.unlinkSync(out);
-        deletedFile = out;
+        deleted.push(out);
       }
       // Other jobs that wrote the same file no longer have it on disk either.
       const sharing = getDb()
-        .select({ id: schema.jobs.id })
+        .select({
+          id: schema.jobs.id,
+          paths: schema.jobs.outputPaths,
+          primary: schema.jobs.outputPath,
+        })
         .from(schema.jobs)
-        .where(eq(schema.jobs.outputPath, job.outputPath))
-        .all();
-      for (const s of sharing)
-        if (s.id !== id) updateJob(s.id, { outputPath: null, outputEncoding: null });
+        .all()
+        .filter(
+          (s) =>
+            s.id !== id && (s.primary === file || ((s.paths ?? []) as string[]).includes(file)),
+        );
+      for (const other of sharing) {
+        const rest = ((other.paths ?? []) as string[]).filter((p) => p !== file);
+        updateJob(other.id, {
+          outputPaths: rest,
+          outputPath: other.primary === file ? (rest[0] ?? null) : other.primary,
+          ...(other.primary === file && !rest.length ? { outputEncoding: null } : {}),
+        });
+      }
     }
+    const deletedFile = deleted[0] ?? null;
     if (keepJob === '1') {
-      updateJob(id, { outputPath: null, outputEncoding: null });
-      if (deletedFile)
-        logJob(id, 'info', 'write', `Deleted ${path.basename(deletedFile)} from disk`);
-      return { deletedFile, jobRemoved: false };
+      updateJob(id, { outputPath: null, outputPaths: [], outputEncoding: null });
+      if (deleted.length)
+        logJob(
+          id,
+          'info',
+          'write',
+          `Deleted ${deleted.map((d) => path.basename(d)).join(' and ')} from disk`,
+        );
+      return { deletedFile, deletedFiles: deleted, jobRemoved: false };
     }
     getDb().delete(schema.jobs).where(eq(schema.jobs.id, id)).run();
     bus.emit({ type: 'job.deleted', jobId: id });
-    return { deletedFile, jobRemoved: true };
+    return { deletedFile, deletedFiles: deleted, jobRemoved: true };
   });
 
   /** Bulk cancel, used by the dashboard. */

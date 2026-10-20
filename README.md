@@ -200,10 +200,11 @@ ollama pull gemma3:12b
 
 Subtitles are always written next to the video:
 
-| Naming (Settings → Subtitles) | Example                       | Picked up automatically by              |
-| ----------------------------- | ----------------------------- | --------------------------------------- |
-| Language suffix (default)     | `Harbor.Lights.S01E01.hr.srt` | Plex, Jellyfin, Emby, Infuse, Kodi, VLC |
-| Same name as the video        | `Harbor.Lights.S01E01.srt`    | players that only look for that name    |
+| Naming (Settings → Subtitles) | Example                       | Picked up automatically by                |
+| ----------------------------- | ----------------------------- | ----------------------------------------- |
+| Language suffix (default)     | `Harbor.Lights.S01E01.hr.srt` | Plex, Jellyfin, Emby, Infuse, Kodi, VLC   |
+| Same name as the video        | `Harbor.Lights.S01E01.srt`    | Samsung, LG and most TVs playing from USB |
+| Both                          | both files above              | TVs and media servers                     |
 
 The subtitle used as the timing source is never overwritten (OSG writes `….osg.srt` instead if the names collide), and files are written atomically (`.part`, then renamed).
 
@@ -268,6 +269,13 @@ Use the **Too fast** filter in the editor, shorten lines by hand or select them 
 <summary><strong>A custom endpoint does not work</strong></summary>
 
 Click **Test** next to it. “Nothing is listening at …” means the server is not running or the port is different. Make sure the base URL ends in `/v1` (or wherever your server mounts the OpenAI API) and that the model id matches what the server has loaded. If your translation server does not support JSON schema output, switch that option off.
+
+</details>
+
+<details>
+<summary><strong>My TV (Samsung, LG…) doesn't show the subtitles, or shows only the built-in ones</strong></summary>
+
+TVs that play files from USB only load an external subtitle named **exactly** like the video (`Episode.mkv` + `Episode.srt`); they ignore language codes such as `Episode.hr.srt`. Choose the file name **Both** (or **Episode.srt**) when starting a translation, or select finished episodes and click **Save subtitle files…** to write them again under the TV name (no new translation, no cost). If letters like č ć đ š ž look wrong on the TV, set the TV's subtitle **Encoding** to UTF-8, or save with **Legacy code page** and choose **Central European** on the TV.
 
 </details>
 

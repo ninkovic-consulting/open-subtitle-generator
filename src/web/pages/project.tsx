@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Captions,
+  Download,
   FolderOpen,
   Languages,
   MoreHorizontal,
@@ -15,6 +16,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import type { Glossary, Job, MediaFile } from '@shared/types';
 import { DeleteSubtitlesDialog } from '@/components/delete-subtitles';
+import { SaveSubtitlesDialog } from '@/components/save-subtitles';
 import { EmptyState, ErrorNote, PageHeader } from '@/components/empty';
 import { LangChip, StatusBadge } from '@/components/status';
 import { Button } from '@/components/ui/button';
@@ -58,6 +60,10 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
   const translate = (ids: number[]) => navigate(`/new?project=${projectId}&media=${ids.join(',')}`);
   const untranslated = files.filter((f) => f.latestJob?.status !== 'done').map((f) => f.id);
   const [deleting, setDeleting] = useState<Job[]>([]);
+  const [saving, setSaving] = useState<Job[]>([]);
+  const selectedDone = files
+    .filter((f) => selected.has(f.id) && f.latestJob?.status === 'done')
+    .map((f) => f.latestJob!);
   const deletable = (f: MediaFile) =>
     f.latestJob && f.latestJob.status !== 'running' && f.latestJob.status !== 'queued'
       ? f.latestJob
@@ -76,6 +82,11 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
         {untranslated.length > 0 && untranslated.length !== files.length && (
           <Button variant="secondary" onClick={() => translate(untranslated)}>
             Translate the {untranslated.length} without subtitles
+          </Button>
+        )}
+        {selectedDone.length > 0 && (
+          <Button variant="secondary" onClick={() => setSaving(selectedDone)}>
+            <Download /> Save subtitle files of {selectedDone.length}…
           </Button>
         )}
         {selectedDeletable.length > 0 && (
@@ -210,6 +221,11 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
                           >
                             <FolderOpen /> Show video
                           </DropdownMenuItem>
+                          {f.latestJob?.status === 'done' && (
+                            <DropdownMenuItem onSelect={() => setSaving([f.latestJob!])}>
+                              <Download /> Save subtitle file…
+                            </DropdownMenuItem>
+                          )}
                           {deletable(f) && (
                             <>
                               <DropdownMenuSeparator />
@@ -234,6 +250,11 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
           </tbody>
         </table>
       </div>
+      <SaveSubtitlesDialog
+        jobs={saving}
+        open={saving.length > 0}
+        onOpenChange={(v) => !v && setSaving([])}
+      />
       <DeleteSubtitlesDialog
         jobs={deleting}
         open={deleting.length > 0}

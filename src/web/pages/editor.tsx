@@ -4,10 +4,11 @@ import { memo, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { languageName } from '@shared/languages';
-import type { Cue, Gender, OutputEncoding, Naming, SubtitlePair } from '@shared/types';
+import type { Cue, Gender, SubtitlePair } from '@shared/types';
 import { EmptyState, ErrorNote, PageHeader } from '@/components/empty';
 import { LanguagePicker } from '@/components/language-picker';
 import { ModelPicker } from '@/components/model-picker';
+import { SaveSubtitlesDialog } from '@/components/save-subtitles';
 import { LangChip } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,13 +16,11 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { Segmented, Spinner } from '@/components/ui/misc';
-import { Select } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip } from '@/components/ui/tooltip';
 import { api, tokenUrl } from '@/lib/api';
 import { cps, parseTimecode, timecode } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { ENCODING_OPTIONS, NAMING_OPTIONS } from './new-translation';
 
 const CPS_LIMIT = 20;
 const GENDER_LABEL: Record<Gender, string> = { m: 'M', f: 'F', u: '?' };
@@ -216,76 +215,6 @@ const CueRow = memo(function CueRow({
     </div>
   );
 });
-
-function ExportDialog({
-  open,
-  onOpenChange,
-  pair,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  pair: SubtitlePair;
-}) {
-  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
-  const [encoding, setEncoding] = useState<OutputEncoding | null>(null);
-  const [naming, setNaming] = useState<Naming | null>(null);
-  const enc =
-    encoding ?? pair.job.options.encoding ?? settings.data?.settings.encoding ?? 'utf8-bom';
-  const nam = naming ?? pair.job.options.naming ?? settings.data?.settings.naming ?? 'lang-suffix';
-  const exp = useMutation({
-    mutationFn: () => api.exportJob(pair.job.id, { encoding: enc, naming: nam, overwrite: true }),
-    onSuccess: (r) => {
-      toast.success('Subtitle saved', { description: `${r.path} (${r.encoding})` });
-      if (r.fellBack)
-        toast.warning(
-          'Some characters do not exist in the legacy code page, so UTF-8 with BOM was used.',
-        );
-      onOpenChange(false);
-    },
-  });
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        title="Save subtitle file"
-        description="Writes the current lines, including your edits, next to the video."
-      >
-        <Field
-          label="Encoding"
-          htmlFor="exp-enc"
-          hint={ENCODING_OPTIONS.find((o) => o.value === enc)?.description}
-        >
-          <Select
-            id="exp-enc"
-            value={enc}
-            options={ENCODING_OPTIONS.map(({ value, label }) => ({ value, label }))}
-            onValueChange={setEncoding}
-          />
-        </Field>
-        <Field
-          label="File name"
-          htmlFor="exp-name"
-          hint={NAMING_OPTIONS.find((o) => o.value === nam)?.description}
-        >
-          <Select
-            id="exp-name"
-            value={nam}
-            options={NAMING_OPTIONS.map(({ value, label }) => ({ value, label }))}
-            onValueChange={setNaming}
-          />
-        </Field>
-        <ErrorNote error={exp.error} />
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => exp.mutate()} disabled={exp.isPending}>
-            {exp.isPending ? <Spinner /> : <Download />} Save subtitle file
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function RetranslateDialog({
   open,
@@ -617,7 +546,7 @@ export function EditorPage() {
             Click a line to edit it; ⌘/Ctrl + Enter or clicking away saves. Click a line number to
             play from there. Edits are saved in OSG; use “Save .srt” to write them to disk.
           </p>
-          <ExportDialog open={exporting} onOpenChange={setExporting} pair={pair} />
+          <SaveSubtitlesDialog jobs={[pair.job]} open={exporting} onOpenChange={setExporting} />
           <RetranslateDialog open={retranslating} onOpenChange={setRetranslating} pair={pair} />
         </>
       )}

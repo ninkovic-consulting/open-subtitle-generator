@@ -45,7 +45,14 @@ export const NAMING_OPTIONS: { value: Naming; label: string; description: string
   {
     value: 'plain',
     label: 'Episode.srt',
-    description: 'Same name as the video. For players that only look for that.',
+    description:
+      'Exactly the video’s name. What Samsung, LG and most TVs look for when playing from USB.',
+  },
+  {
+    value: 'both',
+    label: 'Both: Episode.hr.srt + Episode.srt',
+    description:
+      'Works on TVs (identical name) and in Plex, Jellyfin, Infuse, VLC (language code).',
   },
 ];
 

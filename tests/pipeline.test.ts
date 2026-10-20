@@ -313,7 +313,7 @@ describe('deleting subtitles', () => {
       'DELETE',
       `/api/jobs/${job.id}/subtitle`,
     );
-    expect(res.json).toEqual({ deletedFile: out, jobRemoved: true });
+    expect(res.json).toEqual({ deletedFile: out, deletedFiles: [out], jobRemoved: true });
     expect(fs.existsSync(out)).toBe(false);
     expect((await req('GET', `/api/jobs/${job.id}`)).status).toBe(404);
     expect(fs.existsSync(ep1)).toBe(true); // the video is never touched
@@ -344,5 +344,39 @@ describe('file search', () => {
     const dirs = (await q('SUMA')).json.entries;
     expect(dirs.map((d) => [d.name, d.type])).toEqual([['Šuma', 'dir']]);
     expect((await q('notes')).json.entries).toEqual([]);
+  });
+});
+
+describe('TV-friendly file names', () => {
+  it('writes both names, re-saves under another name and deletes every file', async () => {
+    const [job] = await runJobs({
+      paths: [ep2],
+      targetLang: 'sl',
+      options: { naming: 'both', overwrite: true },
+    });
+    expect(job!.status, job!.error ?? '').toBe('done');
+    const names = job!.outputPaths.map((p) => path.basename(p));
+    expect(names).toEqual(['My.Show.S01E02.sl.srt', 'My.Show.S01E02.srt']);
+    names.forEach((n) => expect(fs.existsSync(path.join(dir, n))).toBe(true));
+
+    // Switch to the plain name only: the language-suffixed file OSG wrote is removed.
+    const saved = await req<{ paths: string[]; removed: string[] }>(
+      'POST',
+      `/api/jobs/${job!.id}/export`,
+      { naming: 'plain' },
+    );
+    expect(saved.json.paths.map((p) => path.basename(p))).toEqual(['My.Show.S01E02.srt']);
+    expect(saved.json.removed).toEqual(['My.Show.S01E02.sl.srt']);
+    expect(fs.existsSync(path.join(dir, 'My.Show.S01E02.sl.srt'))).toBe(false);
+
+    // Back to both, then delete: both files go.
+    await req('POST', `/api/jobs/${job!.id}/export`, { naming: 'both' });
+    const del = await req<{ deletedFiles: string[] }>('DELETE', `/api/jobs/${job!.id}/subtitle`);
+    expect(del.json.deletedFiles.map((p) => path.basename(p)).sort()).toEqual([
+      'My.Show.S01E02.sl.srt',
+      'My.Show.S01E02.srt',
+    ]);
+    expect(fs.existsSync(path.join(dir, 'My.Show.S01E02.srt'))).toBe(false);
+    expect(fs.existsSync(ep2)).toBe(true);
   });
 });
