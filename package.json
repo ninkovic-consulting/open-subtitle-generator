@@ -29,8 +29,8 @@
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
-    "lint": "eslint . && prettier --check .",
-    "format": "prettier --write .",
+    "lint": "eslint . && prettier --check src tests scripts .github \"*.{ts,js,mjs,json,md,yml}\"",
+    "format": "prettier --write src tests scripts .github \"*.{ts,js,mjs,json,md,yml}\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:live": "vitest run --config vitest.live.config.ts",
@@ -90,11 +90,5 @@
     "typescript-eslint": "^8.72.0",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
-  },
-  "allowScripts": {
-    "ffmpeg-static": true,
-    "esbuild": true,
-    "@openrouter/sdk": false,
-    "better-sqlite3": false
   }
 }

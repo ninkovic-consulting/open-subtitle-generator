@@ -8,5 +8,6 @@ export default defineConfig({
     hookTimeout: 60_000,
     pool: 'forks',
     setupFiles: ['tests/setup.ts'],
+    globalSetup: ['tests/global-setup.ts'],
   },
 });

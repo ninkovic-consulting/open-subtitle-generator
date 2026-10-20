@@ -3,10 +3,12 @@ import { buildApp } from './app.js';
 import { config, ensureDataDir } from './config.js';
 import { openDb } from './db/client.js';
 import { logger } from './logger.js';
+import { ensureFfmpeg } from './services/binaries.js';
 
 async function main(): Promise<void> {
   ensureDataDir();
   openDb();
+  await ensureFfmpeg((msg) => logger.info(msg)).catch((err: Error) => logger.error(err.message));
   const { app, queue } = await buildApp({ dev: config.dev });
   try {
     await app.listen({ host: config.host, port: config.port });

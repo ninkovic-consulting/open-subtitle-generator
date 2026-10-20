@@ -8,7 +8,7 @@
 
 Pick a season folder, choose a language, and OSG writes `Episode.hr.srt` next to every video, ready for Plex, Jellyfin, Infuse, Kodi and VLC.
 
-[![CI](https://github.com/ninkovic-consulting/open-subtitle-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/ninkovic-consulting/open-subtitle-generator/actions/workflows/ci.yml)
+[![CI](https://github.com/ninkovic-consulting/open-subtitle-generator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ninkovic-consulting/open-subtitle-generator/actions/workflows/ci.yml?query=branch%3Amain)
 ![License: MIT](https://img.shields.io/badge/license-MIT-f2c94c)
 ![Node.js ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-7ea6f6)
 
@@ -45,7 +45,7 @@ OSG is a local-first app: a small Node.js server runs on your machine and you us
 - **Review and fix.** A side-by-side editor with timestamps, speaker gender, reading-speed warnings (> 20 characters per second), search, inline editing, re-translation of selected lines and a video preview with the subtitles on top.
 - **Live progress, logs and costs.** Every stage, log line and API call is visible while it happens; the real cost reported by the provider is stored per call, job, show and model.
 - **Local models welcome.** Point speech-to-text, translation or both at Speaches, whisper.cpp, LocalAI, Ollama, LM Studio, vLLM, llama.cpp or any other OpenAI-compatible server. One click resets everything to the OpenRouter defaults.
-- **No setup beyond Node.js.** `npm install` downloads its own ffmpeg. No Homebrew, Python or Docker needed for the default setup.
+- **No setup beyond Node.js.** No compiler, Homebrew, Python or Docker needed: dependencies install from prebuilt binaries and OSG downloads its own ffmpeg on first start.
 
 | Subtitle editor                                                    | Translation wizard                                                     |
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
@@ -104,7 +104,7 @@ cd open-subtitle-generator && npm install
 npm start
 ```
 
-The first `npm start` builds the app and opens **http://localhost:4747** in your browser. Then:
+The first `npm start` builds the app, downloads ffmpeg (about 45 MB, once) and opens **http://localhost:4747** in your browser. Then:
 
 1. Open **Settings** and paste your OpenRouter API key ([create one here](https://openrouter.ai/keys)), or set up [local models](#running-models-on-your-computer). Click **Test key**.
 2. Click **New translation**, browse to a season folder and select the episodes.
@@ -228,9 +228,9 @@ Existing subtitles are read in any common encoding: BOM and UTF-16 detection, st
 ## Troubleshooting
 
 <details>
-<summary><strong>“Could not start ffmpeg” or the ffmpeg download fails during <code>npm install</code></strong></summary>
+<summary><strong>“Could not download ffmpeg” or “Could not start ffmpeg”</strong></summary>
 
-`ffmpeg-static` downloads an ffmpeg binary while installing. Behind a proxy or firewall that download can fail. Re-run `npm install` with a working connection, or install ffmpeg yourself and point OSG to it with `FFMPEG_PATH=/path/to/ffmpeg` and `FFPROBE_PATH=/path/to/ffprobe` in `.env`. With npm 11, the download is allowed through the `allowScripts` entry in `package.json`; if you changed npm's script settings, run `npm rebuild ffmpeg-static`.
+OSG installs dependencies without running their install scripts (see `.npmrc`), so nothing needs a compiler. The one binary that is not bundled, ffmpeg, is downloaded on the first start from the [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static) releases. Behind a proxy, set `HTTPS_PROXY`; without internet access, install ffmpeg yourself and set `FFMPEG_PATH=/path/to/ffmpeg` (and optionally `FFPROBE_PATH`) in `.env`.
 
 </details>
 
