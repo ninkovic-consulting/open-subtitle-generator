@@ -2,6 +2,15 @@
 
 All notable changes to OSG are listed here. The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- Delete subtitles from an episode's menu, for several selected episodes, or from the job page. Only the `.srt` OSG wrote is deleted; the translation can be kept in OSG.
+- Search in the file browser: filter the current folder instantly, or include subfolders (case- and accent-insensitive).
+- Jobs now prepare the audio before the character pass, so the log follows the stage timeline, and translation logs its progress batch by batch.
+- The timeline names what replaced transcription (“Subtitle track” or “Existing .srt”).
+- Install no longer runs dependency install scripts, so no compiler is needed on any platform (fixes `npm install` on Windows with Node 22); ffmpeg is downloaded on first start.
+- OSG's own subtitle files are no longer offered as existing subtitles or used as the timing source.
+
 ## 0.1.0 – 2026-10-20
 
 First public release.

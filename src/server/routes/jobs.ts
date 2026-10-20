@@ -13,6 +13,7 @@ import {
   exportSchema,
   retranslateSchema,
   type ApiCall,
+  type DeleteSubtitleResponse,
   type EstimateResponse,
   type FileEstimate,
   type JobLog,
@@ -463,6 +464,48 @@ export async function jobRoutes(app: FastifyInstance, opts: { queue: JobQueue })
     );
     queue.enqueue();
     return { job: created };
+  });
+
+  /**
+   * Deletes the subtitle file a job wrote (only `.srt` files OSG created next to the video).
+   * By default the job is removed from history too; `?keepJob=1` keeps the translation in OSG
+   * so it can be saved again from the editor.
+   */
+  app.delete('/api/jobs/:id/subtitle', async (req): Promise<DeleteSubtitleResponse> => {
+    const id = paramId(req);
+    const { keepJob } = parse(z.object({ keepJob: z.enum(['0', '1']).default('0') }), req.query);
+    const job = getJob(id) ?? notFound('Job');
+    if (job.status === 'running' || job.status === 'queued')
+      throw new HttpError(409, 'Cancel the job before deleting its subtitles');
+    let deletedFile: string | null = null;
+    if (job.outputPath) {
+      const out = path.resolve(job.outputPath);
+      const safe =
+        path.extname(out).toLowerCase() === '.srt' &&
+        path.dirname(out) === path.dirname(path.resolve(job.filePath));
+      if (!safe) throw new HttpError(400, 'Refusing to delete a file outside the video folder');
+      if (fs.existsSync(out)) {
+        fs.unlinkSync(out);
+        deletedFile = out;
+      }
+      // Other jobs that wrote the same file no longer have it on disk either.
+      const sharing = getDb()
+        .select({ id: schema.jobs.id })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.outputPath, job.outputPath))
+        .all();
+      for (const s of sharing)
+        if (s.id !== id) updateJob(s.id, { outputPath: null, outputEncoding: null });
+    }
+    if (keepJob === '1') {
+      updateJob(id, { outputPath: null, outputEncoding: null });
+      if (deletedFile)
+        logJob(id, 'info', 'write', `Deleted ${path.basename(deletedFile)} from disk`);
+      return { deletedFile, jobRemoved: false };
+    }
+    getDb().delete(schema.jobs).where(eq(schema.jobs.id, id)).run();
+    bus.emit({ type: 'job.deleted', jobId: id });
+    return { deletedFile, jobRemoved: true };
   });
 
   /** Bulk cancel, used by the dashboard. */

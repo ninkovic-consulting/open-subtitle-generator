@@ -347,6 +347,21 @@ export async function translateCues(o: TranslateOptions): Promise<Map<number, Tr
   for (let i = 0; i < targets.length; i += o.batchSize)
     batches.push(targets.slice(i, i + o.batchSize));
   o.onProgress?.(0, targets.length);
-  await mapLimit(batches, o.concurrency, (batch) => translateGroup(batch, audioEnabled, 0));
+  o.log(
+    'info',
+    `Translating ${targets.length} lines in ${batches.length} batch${batches.length === 1 ? '' : 'es'} of up to ${o.batchSize} (${Math.min(o.concurrency, batches.length)} at a time, ${audioEnabled ? 'with audio clips' : 'text only'})`,
+  );
+  let finished = 0;
+  const startedAt = Date.now();
+  await mapLimit(batches, o.concurrency, async (batch) => {
+    await translateGroup(batch, audioEnabled, 0);
+    finished++;
+    if (batches.length > 1) {
+      o.log(
+        'info',
+        `Batch ${finished}/${batches.length} done (lines ${batch[0]!.id}–${batch[batch.length - 1]!.id}, ${Math.round((Date.now() - startedAt) / 1000)} s)`,
+      );
+    }
+  });
   return results;
 }

@@ -245,7 +245,9 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
           'info',
           `Extracting audio track #${track.index} (${track.codec}, ${track.language ?? 'unknown language'}, ${track.channels} ch)`,
         );
+        const t0 = Date.now();
         await extractAudio(media.path, track.index, out, signal);
+        log('info', `Audio ready in ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s`);
       }
       wavPath = out;
       if (prev !== 'extract') stage = prev;
@@ -363,6 +365,22 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
         costUsd: number | null;
       }) => (chatIsCustom ? (u.costUsd ?? 0) : (u.costUsd ?? costFromUsage(chatPricing, u)));
 
+      // Audio for voice-based gender is prepared before the character pass, so the stages run in
+      // the order the timeline shows (Audio → Characters → Translate).
+      if (wantVoice && !providers.chat.supportsAudio) {
+        log(
+          'info',
+          'Voice-based gender is off: the custom translation endpoint is configured without audio input',
+        );
+      }
+      const wav = useVoice
+        ? await ensureWav().catch((err) => {
+            if (isAbortError(err)) throw err;
+            log('warn', `Audio not available for gender detection: ${(err as Error).message}`);
+            return null;
+          })
+        : null;
+
       setStage('context');
       const projectId = media.projectId;
       let glossary = projectId ? getGlossary(projectId) : structuredClone(EMPTY_GLOSSARY);
@@ -399,20 +417,6 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
       if (projectId) saveGlossary(projectId, glossary);
 
       setStage('translate');
-      if (wantVoice && !providers.chat.supportsAudio) {
-        log(
-          'info',
-          'Voice-based gender is off: the custom translation endpoint is configured without audio input',
-        );
-      }
-      const wav = useVoice
-        ? await ensureWav().catch((err) => {
-            if (isAbortError(err)) throw err;
-            log('warn', `Audio not available for gender detection: ${(err as Error).message}`);
-            return null;
-          })
-        : null;
-      stage = 'translate';
       const sourceCues: SourceCue[] = source.cues.map((c) => ({
         id: c.idx,
         startMs: c.startMs,

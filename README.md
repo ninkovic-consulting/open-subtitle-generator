@@ -182,13 +182,13 @@ ollama pull gemma3:12b
 
 ## Using OSG
 
-**Shows & movies.** Add a folder (a season, a whole show or a movie). OSG lists every video in it, including subfolders, with its length, whether an existing subtitle can be used for timing, the status of the latest job, and what it cost. Select episodes and click **Translate selected**, or translate all episodes that do not have subtitles yet.
+**Shows & movies.** Add a folder (a season, a whole show or a movie). OSG lists every video in it, including subfolders, with its length, whether an existing subtitle can be used for timing, the status of the latest job, and what it cost. Select episodes and click **Translate selected**, or translate all episodes that do not have subtitles yet. To start over, use **Delete subtitles** in an episode's menu (or for several selected episodes): it deletes the `.srt` OSG wrote, never your videos or other subtitle files, and can keep the translation in OSG so you can save it again later.
 
 **Characters & glossary.** Each folder has its own character sheet (name, gender, notes), forms of address (who uses informal or formal speech with whom), terms with fixed translations, and style notes. OSG fills it from every episode; your edits always win and are used by every future job in that folder.
 
 ![Character sheet and glossary](docs/screenshots/glossary.png)
 
-**New translation.** Four steps: choose videos, languages, options (existing subtitles, voice-based gender, models, encoding, file name, overwrite), then review the cost estimate. If an output file already exists, OSG asks before replacing it; jobs that would overwrite without permission stop before any paid request.
+**New translation.** Four steps: choose videos (search the current folder, or switch on **Include subfolders** to find an episode anywhere below it), languages, options (existing subtitles, voice-based gender, models, encoding, file name, overwrite), then review the cost estimate. If an output file already exists, OSG asks before replacing it; jobs that would overwrite without permission stop before any paid request.
 
 **Jobs.** Each job shows its six stages, live progress, a searchable log (copy it into a bug report), every API call with tokens and cost, and details such as the detected language and encoding. Failed jobs can be retried, either keeping finished stages or from a specific stage.
 

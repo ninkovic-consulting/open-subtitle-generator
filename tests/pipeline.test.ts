@@ -266,3 +266,83 @@ describe('own outputs are not existing subtitles', () => {
     expect(est.json.files[0]!.timingSource).toBe('stt');
   });
 });
+
+describe('stage order and progress logs', () => {
+  it('prepares audio before the character pass and logs translation progress', async () => {
+    const job = (await req<{ jobs: Job[] }>('GET', '/api/jobs?status=done')).json.jobs.find(
+      (j) => j.timingSource === 'embedded_srt',
+    )!;
+    const logs = (
+      await req<{ logs: { stage: string | null; message: string }[] }>(
+        'GET',
+        `/api/jobs/${job.id}/logs`,
+      )
+    ).json.logs;
+    const at = (re: RegExp) => logs.findIndex((l) => re.test(l.message));
+    expect(at(/^Extracting audio/)).toBeGreaterThan(-1);
+    expect(at(/^Extracting audio/)).toBeLessThan(at(/^Context pass/));
+    expect(at(/^Translating \d+ lines in/)).toBeGreaterThan(at(/^Context pass/));
+  });
+});
+
+describe('deleting subtitles', () => {
+  it('deletes the file but keeps the translation when asked', async () => {
+    const job = (await req<{ jobs: Job[] }>('GET', '/api/jobs?status=done')).json.jobs.find(
+      (j) => j.timingSource === 'embedded_srt' && j.targetLang === 'hr',
+    )!;
+    expect(fs.existsSync(job.outputPath!)).toBe(true);
+    const res = await req<{ deletedFile: string; jobRemoved: boolean }>(
+      'DELETE',
+      `/api/jobs/${job.id}/subtitle?keepJob=1`,
+    );
+    expect(res.json.jobRemoved).toBe(false);
+    expect(fs.existsSync(res.json.deletedFile)).toBe(false);
+    const after = (await req<{ job: Job }>('GET', `/api/jobs/${job.id}`)).json.job;
+    expect(after.outputPath).toBeNull();
+    // Saving again from the editor writes the file back.
+    const exp = await req<{ path: string }>('POST', `/api/jobs/${job.id}/export`, {});
+    expect(fs.existsSync(exp.json.path)).toBe(true);
+  });
+
+  it('deletes the file and removes the job from history', async () => {
+    const job = (await req<{ jobs: Job[] }>('GET', '/api/jobs?status=done')).json.jobs.find(
+      (j) => j.targetLang === 'de',
+    )!;
+    const out = job.outputPath!;
+    const res = await req<{ deletedFile: string; jobRemoved: boolean }>(
+      'DELETE',
+      `/api/jobs/${job.id}/subtitle`,
+    );
+    expect(res.json).toEqual({ deletedFile: out, jobRemoved: true });
+    expect(fs.existsSync(out)).toBe(false);
+    expect((await req('GET', `/api/jobs/${job.id}`)).status).toBe(404);
+    expect(fs.existsSync(ep1)).toBe(true); // the video is never touched
+  });
+});
+
+describe('file search', () => {
+  it('finds folders and videos in subfolders, ignoring case and accents', async () => {
+    const root = tempDir();
+    const season = path.join(root, 'Šuma', 'Sezona 1');
+    fs.mkdirSync(season, { recursive: true });
+    fs.writeFileSync(path.join(season, 'Čarobnjak.S01E01.mkv'), '');
+    fs.writeFileSync(path.join(season, 'Čarobnjak.S01E01.srt'), '');
+    fs.writeFileSync(path.join(root, 'notes.txt'), '');
+    const q = (s: string) =>
+      req<{ entries: { name: string; type: string; relativeDir: string }[] }>(
+        'GET',
+        `/api/fs/search?path=${encodeURIComponent(root)}&q=${encodeURIComponent(s)}`,
+      );
+    const videos = (await q('carobnjak s01')).json.entries;
+    expect(videos).toEqual([
+      expect.objectContaining({
+        name: 'Čarobnjak.S01E01.mkv',
+        type: 'video',
+        relativeDir: path.join('Šuma', 'Sezona 1'),
+      }),
+    ]);
+    const dirs = (await q('SUMA')).json.entries;
+    expect(dirs.map((d) => [d.name, d.type])).toEqual([['Šuma', 'dir']]);
+    expect((await q('notes')).json.entries).toEqual([]);
+  });
+});

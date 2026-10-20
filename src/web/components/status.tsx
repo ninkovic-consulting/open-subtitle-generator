@@ -90,11 +90,18 @@ export function StageTimeline({
     <ol className={cn('flex w-full items-center gap-1', className)}>
       {JOB_STAGES.map((stage, i) => {
         const state = stageState(job, stage);
+        // When an existing subtitle gave the timing, stage 3 names what was used instead.
+        const skippedLabel =
+          job.timingSource === 'embedded_srt' ? 'Subtitle track' : 'Existing .srt';
+        const skippedTitle =
+          job.timingSource === 'embedded_srt'
+            ? 'No transcription needed: timing comes from the embedded subtitle track'
+            : 'No transcription needed: timing comes from the .srt next to the video';
         return (
           <li
             key={stage}
             className="flex min-w-0 flex-1 flex-col gap-1.5"
-            title={STAGE_DESCRIPTIONS[stage]}
+            title={state === 'skipped' ? skippedTitle : STAGE_DESCRIPTIONS[stage]}
           >
             <div
               className={cn(
@@ -102,7 +109,7 @@ export function StageTimeline({
                 state === 'done' && 'bg-accent-fill',
                 state === 'active' && 'bg-accent-fill/50 animate-pulse',
                 state === 'failed' && 'bg-danger',
-                state === 'skipped' && 'bg-line-strong',
+                state === 'skipped' && 'bg-accent-fill/35',
                 state === 'pending' && 'bg-line',
               )}
             />
@@ -114,14 +121,13 @@ export function StageTimeline({
                     ? 'text-text font-medium'
                     : state === 'failed'
                       ? 'text-danger'
-                      : state === 'done'
+                      : state === 'done' || state === 'skipped'
                         ? 'text-muted'
                         : 'text-faint',
                 )}
               >
                 <span className="tabular mr-1 text-faint">{i + 1}</span>
-                {STAGE_LABELS[stage]}
-                {state === 'skipped' && ' (skipped)'}
+                {state === 'skipped' ? skippedLabel : STAGE_LABELS[stage]}
               </span>
             )}
           </li>

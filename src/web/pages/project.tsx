@@ -13,7 +13,8 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import type { Glossary, MediaFile } from '@shared/types';
+import type { Glossary, Job, MediaFile } from '@shared/types';
+import { DeleteSubtitlesDialog } from '@/components/delete-subtitles';
 import { EmptyState, ErrorNote, PageHeader } from '@/components/empty';
 import { LangChip, StatusBadge } from '@/components/status';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input, Textarea } from '@/components/ui/input';
@@ -55,6 +57,15 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
   };
   const translate = (ids: number[]) => navigate(`/new?project=${projectId}&media=${ids.join(',')}`);
   const untranslated = files.filter((f) => f.latestJob?.status !== 'done').map((f) => f.id);
+  const [deleting, setDeleting] = useState<Job[]>([]);
+  const deletable = (f: MediaFile) =>
+    f.latestJob && f.latestJob.status !== 'running' && f.latestJob.status !== 'queued'
+      ? f.latestJob
+      : null;
+  const selectedDeletable = files
+    .filter((f) => selected.has(f.id))
+    .map(deletable)
+    .filter((j): j is Job => !!j && (j.status === 'done' || !!j.outputPath));
 
   return (
     <div className="grid gap-3">
@@ -65,6 +76,11 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
         {untranslated.length > 0 && untranslated.length !== files.length && (
           <Button variant="secondary" onClick={() => translate(untranslated)}>
             Translate the {untranslated.length} without subtitles
+          </Button>
+        )}
+        {selectedDeletable.length > 0 && (
+          <Button variant="danger" onClick={() => setDeleting(selectedDeletable)}>
+            <Trash2 /> Delete subtitles of {selectedDeletable.length}
           </Button>
         )}
       </div>
@@ -134,7 +150,12 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
                   </td>
                   <td className="px-2 py-2.5">
                     {job ? (
-                      <StatusBadge status={job.status} />
+                      <span className="flex flex-col items-start gap-0.5">
+                        <StatusBadge status={job.status} />
+                        {job.status === 'done' && !job.outputPath && (
+                          <span className="text-2xs text-muted">File deleted</span>
+                        )}
+                      </span>
                     ) : (
                       <span className="text-xs text-faint">Not started</span>
                     )}
@@ -189,6 +210,20 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
                           >
                             <FolderOpen /> Show video
                           </DropdownMenuItem>
+                          {deletable(f) && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-danger"
+                                onSelect={() => setDeleting([deletable(f)!])}
+                              >
+                                <Trash2 />{' '}
+                                {f.latestJob?.outputPath
+                                  ? 'Delete subtitles…'
+                                  : 'Remove translation…'}
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -199,6 +234,12 @@ function EpisodeTable({ projectId, files }: { projectId: number; files: MediaFil
           </tbody>
         </table>
       </div>
+      <DeleteSubtitlesDialog
+        jobs={deleting}
+        open={deleting.length > 0}
+        onOpenChange={(v) => !v && setDeleting([])}
+        onDeleted={() => setSelected(new Set())}
+      />
     </div>
   );
 }

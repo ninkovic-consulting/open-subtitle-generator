@@ -481,6 +481,21 @@ export interface FsEntry {
   type: 'dir' | 'video' | 'subtitle';
   sizeBytes?: number;
   modifiedAt?: number;
+  /** Search results only: folder of the entry relative to the searched folder. */
+  relativeDir?: string;
+}
+
+export interface FsSearchResponse {
+  path: string;
+  query: string;
+  entries: FsEntry[];
+  /** True when the search stopped early (result or folder limit). */
+  truncated: boolean;
+}
+
+export interface DeleteSubtitleResponse {
+  deletedFile: string | null;
+  jobRemoved: boolean;
 }
 
 export interface FsListResponse {

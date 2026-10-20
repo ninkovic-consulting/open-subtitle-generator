@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { FsEntry, FsListResponse, FsRoot } from '../../shared/types.js';
+import type { FsEntry, FsListResponse, FsRoot, FsSearchResponse } from '../../shared/types.js';
 import { SUBTITLE_EXTENSIONS, VIDEO_EXTENSIONS } from './media.js';
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -172,6 +172,87 @@ export function findVideos(root: string, maxDepth = 6, limit = 5000): FoundVideo
   };
   walk(resolveUserPath(root), 0);
   return found.sort((a, b) => collator.compare(a.path, b.path));
+}
+
+/** Case- and accent-insensitive form used for name matching ("Čarobnjak" matches "carob"). */
+export function foldName(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
+/**
+ * Recursive name search below `root` for folders and video files. Every word of the query must
+ * appear in the name. Bounded by depth, result count, visited folders and time.
+ */
+export function searchEntries(
+  root: string,
+  query: string,
+  opts: { maxDepth?: number; limit?: number; maxDirs?: number; timeMs?: number } = {},
+): FsSearchResponse {
+  const base = resolveUserPath(root);
+  const words = foldName(query).split(/\s+/).filter(Boolean);
+  const maxDepth = opts.maxDepth ?? 6;
+  const limit = opts.limit ?? 300;
+  const maxDirs = opts.maxDirs ?? 20_000;
+  const deadline = Date.now() + (opts.timeMs ?? 4000);
+  const entries: FsEntry[] = [];
+  let visited = 0;
+  let truncated = false;
+  if (!words.length) return { path: base, query, entries, truncated };
+  const matches = (name: string) => {
+    const n = foldName(name);
+    return words.every((w) => n.includes(w));
+  };
+  const walk = (dir: string, depth: number) => {
+    if (truncated) return;
+    if (entries.length >= limit || visited >= maxDirs || Date.now() > deadline) {
+      truncated = true;
+      return;
+    }
+    visited++;
+    let dirents: fs.Dirent[];
+    try {
+      dirents = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const subdirs: string[] = [];
+    for (const d of dirents) {
+      if (d.name.startsWith('.') || d.name.startsWith('$')) continue;
+      const full = path.join(dir, d.name);
+      const relativeDir = path.relative(base, dir);
+      if (d.isDirectory()) {
+        if (/\.(app|bundle|photoslibrary)$/i.test(d.name)) continue;
+        if (matches(d.name)) entries.push({ name: d.name, path: full, type: 'dir', relativeDir });
+        subdirs.push(full);
+      } else if (
+        d.isFile() &&
+        VIDEO_EXTENSIONS.has(path.extname(d.name).toLowerCase()) &&
+        matches(d.name)
+      ) {
+        let sizeBytes: number | undefined;
+        try {
+          sizeBytes = fs.statSync(full).size;
+        } catch {
+          // ignore
+        }
+        entries.push({ name: d.name, path: full, type: 'video', sizeBytes, relativeDir });
+      }
+      if (entries.length >= limit) {
+        truncated = true;
+        return;
+      }
+    }
+    if (depth < maxDepth) for (const sub of subdirs) walk(sub, depth + 1);
+  };
+  walk(base, 0);
+  const order = { dir: 0, video: 1, subtitle: 2 } as const;
+  entries.sort((a, b) => order[a.type] - order[b.type] || collator.compare(a.name, b.name));
+  return { path: base, query, entries, truncated };
 }
 
 /** Longest common directory of the given absolute paths. */

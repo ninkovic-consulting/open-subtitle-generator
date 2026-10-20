@@ -1,9 +1,11 @@
 import type {
   ApiCall,
   CreateJobsBody,
+  DeleteSubtitleResponse,
   Cue,
   EstimateResponse,
   FsListResponse,
+  FsSearchResponse,
   FsRoot,
   Glossary,
   Job,
@@ -90,6 +92,8 @@ export const api = {
 
   fsRoots: () => request<{ roots: FsRoot[] }>('GET', '/api/fs/roots'),
   fsList: (path: string) => request<FsListResponse>('GET', '/api/fs/list', { query: { path } }),
+  fsSearch: (path: string, q: string) =>
+    request<FsSearchResponse>('GET', '/api/fs/search', { query: { path, q } }),
   reveal: (path: string) => request<{ ok: true }>('POST', '/api/fs/reveal', { body: { path } }),
 
   projects: () => request<{ projects: Project[] }>('GET', '/api/projects'),
@@ -126,6 +130,10 @@ export const api = {
   cancelJob: (id: number) => request<{ job: Job }>('DELETE', `/api/jobs/${id}`),
   removeJob: (id: number) =>
     request<{ ok: true }>('DELETE', `/api/jobs/${id}`, { query: { remove: 1 } }),
+  deleteSubtitle: (id: number, keepJob: boolean) =>
+    request<DeleteSubtitleResponse>('DELETE', `/api/jobs/${id}/subtitle`, {
+      query: { keepJob: keepJob ? 1 : 0 },
+    }),
   retryJob: (id: number, fromStage?: JobStage) =>
     request<{ job: Job }>('POST', `/api/jobs/${id}/retry`, { body: { fromStage } }),
   logs: (id: number, after?: number) =>

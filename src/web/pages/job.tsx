@@ -1,9 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronDown, FolderOpen, PenLine, RotateCcw, Square, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { languageName } from '@shared/languages';
 import { JOB_STAGES, type JobStage } from '@shared/types';
+import { DeleteSubtitlesDialog } from '@/components/delete-subtitles';
 import { ErrorNote, PageHeader } from '@/components/empty';
 import { LogViewer } from '@/components/log-viewer';
 import { LangChip, StageTimeline, StatusBadge } from '@/components/status';
@@ -17,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Progress, Spinner } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import {
   STAGE_DESCRIPTIONS,
@@ -111,6 +114,7 @@ export function JobPage() {
     mutationFn: () => api.removeJob(id),
     onSuccess: () => navigate('/'),
   });
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const job = q.data?.job;
   if (q.error) return <ErrorNote error={q.error} />;
   if (!job) return <Spinner />;
@@ -188,16 +192,38 @@ export function JobPage() {
               </Button>
             )}
             {!active && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Delete job from history"
-                onClick={() => remove.mutate()}
+              <Tooltip
+                content={
+                  job.outputPath
+                    ? 'Delete the subtitle file'
+                    : job.status === 'done'
+                      ? 'Remove this translation'
+                      : 'Delete this job from history'
+                }
               >
-                <Trash2 />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={job.outputPath ? 'Delete the subtitle file' : 'Delete this job'}
+                  onClick={() =>
+                    job.status === 'done' || job.outputPath
+                      ? setConfirmDelete(true)
+                      : remove.mutate()
+                  }
+                >
+                  <Trash2 />
+                </Button>
+              </Tooltip>
             )}
           </>
+        }
+      />
+      <DeleteSubtitlesDialog
+        jobs={[job]}
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        onDeleted={(removed) =>
+          removed && navigate(job.projectId ? `/projects/${job.projectId}` : '/')
         }
       />
 
