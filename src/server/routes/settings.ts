@@ -12,6 +12,7 @@ import { parse } from '../http.js';
 import { createProviders } from '../providers/index.js';
 import { listCompatibleModels } from '../providers/openai-compatible.js';
 import { recordApiCall } from '../services/joblog.js';
+import type { JobQueue } from '../services/queue.js';
 import { FFMPEG, run } from '../services/media.js';
 import { clearModelCache, getCustomModels, getOpenRouterModels } from '../services/models.js';
 import {
@@ -105,13 +106,18 @@ async function testOpenRouterKey(key: string): Promise<TestProviderResult> {
   return { ok: true, message: 'OpenRouter key is valid', details };
 }
 
-export async function settingsRoutes(app: FastifyInstance): Promise<void> {
+export async function settingsRoutes(
+  app: FastifyInstance,
+  opts: { queue?: JobQueue } = {},
+): Promise<void> {
   app.get('/api/settings', async () => toSettingsResponse(loadSettings()));
 
   app.put('/api/settings', async (req) => {
     const patch = parse(settingsUpdateSchema, req.body);
     const next = updateSettings(patch);
     clearModelCache();
+    // A higher "jobs at the same time" starts waiting jobs right away.
+    opts.queue?.enqueue();
     return toSettingsResponse(next);
   });
 
@@ -122,6 +128,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     );
     const next = resetSettings(scope);
     clearModelCache();
+    opts.queue?.enqueue();
     return toSettingsResponse(next);
   });
 

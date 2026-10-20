@@ -108,3 +108,68 @@ describe('transcribeChunks', () => {
     expect(res.segments).toHaveLength(1);
   });
 });
+
+describe('dialogue-only filter', () => {
+  const seg = (start: number, end: number, text: string) => ({ start, end, text });
+
+  it('strips sound annotations and detects non-speech', async () => {
+    const { stripAnnotations, isNonSpeech } = await import('../src/server/services/stt.js');
+    expect(stripAnnotations('*Dramatic music* I said move. ♪')).toBe('I said move.');
+    expect(stripAnnotations('- - Yeah.')).toBe('- Yeah.');
+    for (const t of [
+      '♪♪',
+      '♪ ♪',
+      '- - -',
+      '*Screaming*',
+      '[Train passing]',
+      'SIGHS',
+      'Sigh.',
+      '(laughs)',
+    ]) {
+      expect(isNonSpeech(t), t).toBe(true);
+    }
+    for (const t of ['Help!', 'You sick fuck.', '- Okay.']) expect(isNonSpeech(t), t).toBe(false);
+  });
+
+  it('recognises stock phrases and their repetitions', async () => {
+    const { isStockPhrase } = await import('../src/server/services/stt.js');
+    for (const t of [
+      'Thank you.',
+      'Thank you. Thank you.',
+      'you Thank you.',
+      'Merci.',
+      '♪ Thank you.',
+      'Bye.',
+    ]) {
+      expect(isStockPhrase(t), t).toBe(true);
+    }
+    for (const t of ['Thank you, Laurent.', 'No, thank you.', 'Goodbye, my friend.']) {
+      expect(isStockPhrase(t), t).toBe(false);
+    }
+  });
+
+  it('drops clusters of stock phrases over music but keeps an isolated real "Thank you."', () => {
+    const { kept, stats } = filterHallucinations([
+      seg(0, 10.6, 'Thanks for watching.'),
+      seg(15.7, 21.2, '*Dramatic music*'),
+      seg(22.3, 23.2, 'Thank you.'),
+      seg(26.4, 27.4, 'Thank you.'),
+      seg(28.1, 28.3, 'Bye.'),
+      seg(37.4, 49.3, '♪ ♪'),
+      seg(60, 62, 'Where were you this morning?'),
+      seg(62.5, 63.4, 'Thank you.'),
+      seg(90, 92, 'Sous-titrage Société Radio-Canada'),
+      seg(120, 121, 'Thank you.'),
+      seg(140, 150, 'Thank you.'),
+    ]);
+    expect(kept.map((k) => k.text)).toEqual(
+      ['Where were you this morning?', 'Thank you.', 'Thank you.']
+        .slice(0, 2)
+        .concat(['Thank you.']),
+    );
+    expect(kept.map((k) => k.start)).toEqual([60, 62.5, 120]);
+    expect(stats.nonSpeech).toBe(2);
+    expect(stats.credits).toBe(2);
+    expect(stats.stock).toBe(4); // three in the cluster + one stretched over 10 s
+  });
+});

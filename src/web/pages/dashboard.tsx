@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, FolderOpen, PenLine, Plus, Square, Terminal } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -8,6 +8,7 @@ import { EmptyState, PageHeader } from '@/components/empty';
 import { LangChip, StageTimeline, StatusBadge } from '@/components/status';
 import { Button } from '@/components/ui/button';
 import { Progress, Section } from '@/components/ui/misc';
+import { Select } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import { STAGE_DESCRIPTIONS, formatDuration, formatUsd, relativeTime } from '@/lib/format';
@@ -220,6 +221,33 @@ function RecentRow({ job }: { job: Job }) {
   );
 }
 
+/** How many jobs run at the same time; saved to Settings and applied immediately. */
+function JobsAtOnce() {
+  const qc = useQueryClient();
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const save = useMutation({
+    mutationFn: (n: number) => api.saveSettings({ jobConcurrency: n }),
+    onSuccess: (res) => {
+      qc.setQueryData(['settings'], res);
+      toast.success(`Up to ${res.settings.jobConcurrency} jobs at the same time`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const value = settings.data?.settings.jobConcurrency;
+  if (!value) return null;
+  return (
+    <label className="flex items-center gap-2 text-sm text-muted">
+      Jobs at once
+      <Select
+        className="h-8 w-16"
+        value={String(value)}
+        onValueChange={(v) => save.mutate(Number(v))}
+        options={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ value: String(n), label: String(n) }))}
+      />
+    </label>
+  );
+}
+
 export function DashboardPage() {
   const active = useQuery({
     queryKey: ['jobs', 'active'],
@@ -273,6 +301,7 @@ export function DashboardPage() {
         <Section
           title="Queue"
           description={`${running.length} running, ${queued.length} waiting. Each job is processed in parallel chunks.`}
+          actions={<JobsAtOnce />}
         >
           <ul className="divide-y divide-line border-y border-line">
             {[...running, ...queued].map((j) => (

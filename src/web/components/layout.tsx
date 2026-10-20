@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { ThemeToggle } from '@/components/theme';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/misc';
 import { Tooltip } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
 import { formatUsd } from '@/lib/format';
+import { useConnectionState } from '@/lib/sse';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -100,6 +102,20 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+/** Shown while the live connection to the local server is down (e.g. during a restart). */
+function ConnectionNotice() {
+  const state = useConnectionState();
+  if (state !== 'reconnecting') return null;
+  return (
+    <span
+      role="status"
+      className="flex items-center gap-2 rounded-full border border-warn/40 bg-warn-soft px-3 py-1 text-xs text-warn"
+    >
+      <Spinner className="size-3" /> Reconnecting to OSG…
+    </span>
+  );
+}
+
 function SpendBadge() {
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats, refetchInterval: 30_000 });
   if (!stats.data) return null;
@@ -157,7 +173,10 @@ export function Layout() {
             <Logo compact />
           </div>
           <div className="hidden md:block" />
-          <SpendBadge />
+          <div className="flex items-center gap-3">
+            <ConnectionNotice />
+            <SpendBadge />
+          </div>
         </header>
         <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-8 md:px-8">
           <Outlet />

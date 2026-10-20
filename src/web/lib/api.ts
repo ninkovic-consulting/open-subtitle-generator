@@ -38,6 +38,31 @@ export class ApiError extends Error {
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
+/**
+ * Every server start issues a new session token, so a tab opened before a restart gets 401s.
+ * Reloading the page fetches the new token. Guarded so a misconfiguration cannot loop.
+ */
+export function reloadForNewSession(): void {
+  try {
+    const last = Number(sessionStorage.getItem('osg-reload-at') ?? 0);
+    if (Date.now() - last < 15_000) return;
+    sessionStorage.setItem('osg-reload-at', String(Date.now()));
+  } catch {
+    // storage unavailable: reload anyway
+  }
+  window.location.reload();
+}
+
+/** `ok`: token accepted; `expired`: the server restarted; `down`: the server is unreachable. */
+export async function checkSession(): Promise<'ok' | 'expired' | 'down'> {
+  try {
+    const res = await fetch('/api/settings', { headers: { 'x-osg-token': token } });
+    return res.status === 401 ? 'expired' : 'ok';
+  } catch {
+    return 'down';
+  }
+}
+
 function withQuery(path: string, query?: Query): string {
   if (!query) return path;
   const params = new URLSearchParams();
@@ -60,6 +85,7 @@ export async function request<T>(
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
+  if (res.status === 401) reloadForNewSession();
   const text = await res.text();
   const json = text ? (JSON.parse(text) as unknown) : null;
   if (!res.ok) {

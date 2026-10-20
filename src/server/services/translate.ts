@@ -24,6 +24,18 @@ export interface TranslatedItem {
   gender: Gender;
   /** True when translation failed and the source text was kept. */
   fallback?: boolean;
+  /** True when the model heard that nobody says this line (a speech-recognition hallucination). */
+  removed?: boolean;
+}
+
+/** Only short lines can be removed as "not spoken": hallucinations are short, real dialogue is safe. */
+export const MAX_REMOVABLE_WORDS = 8;
+
+function wordCount(text: string): number {
+  return text
+    .replace(/<[^>]+>/g, ' ')
+    .split(/\s+/)
+    .filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 }
 
 export const BATCH_SCHEMA = {
@@ -36,9 +48,10 @@ export const BATCH_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'speaker_gender', 'text'],
+        required: ['id', 'spoken', 'speaker_gender', 'text'],
         properties: {
           id: { type: 'integer' },
+          spoken: { type: 'boolean' },
           speaker_gender: { type: 'string', enum: ['m', 'f', 'u'] },
           text: { type: 'string' },
         },
@@ -47,7 +60,11 @@ export const BATCH_SCHEMA = {
   },
 } as const;
 
-export function translationSystemPrompt(targetLanguage: string, withAudio: boolean): string {
+export function translationSystemPrompt(
+  targetLanguage: string,
+  withAudio: boolean,
+  verifySpeech = false,
+): string {
   return [
     `You are a professional subtitle translator. Translate the cues into ${targetLanguage}.`,
     '',
@@ -60,11 +77,14 @@ export function translationSystemPrompt(targetLanguage: string, withAudio: boole
     withAudio
       ? '- Listen to the attached audio clip to decide who is speaking: set speaker_gender to "m" or "f" from the voice (or "u" if unclear). Cue times "t" are relative to the start of the clip.'
       : '- Infer speaker_gender ("m", "f", "u") from context, names and the glossary.',
+    verifySpeech
+      ? '- The cues come from automatic speech recognition, which invents short lines over music, noise or silence (typically "Thank you.", "Bye.", "you", "Merci.", "Amen." or subtitle credits). Listen at each cue\'s time: set spoken=false and text "" when nobody says those words there (only music, effects, silence, or clearly different speech). Otherwise, or when unsure, set spoken=true and translate it.'
+      : '- Always set spoken=true.',
     '- Apply correct grammatical gender for the speaker and the addressee (critical for Slavic languages, e.g. Croatian "bio sam / bila sam", "jesi li spreman / spremna", Russian "я пошёл / пошла").',
     '- Respect the formality rules from the glossary (informal ti/du/tu vs formal Vi/Sie/vous). Default: informal between friends and family, formal with strangers and superiors.',
     '- Context lines are read-only, for understanding only. Do not translate or output them.',
     '- Use the correct script and orthography of the target language (diacritics such as č ć đ š ž must be present).',
-    '- Output JSON only: {"items":[{"id":1,"speaker_gender":"m","text":"…"}]}',
+    '- Output JSON only: {"items":[{"id":1,"spoken":true,"speaker_gender":"m","text":"…"}]}',
   ].join('\n');
 }
 
@@ -80,8 +100,15 @@ export interface ValidationResult {
   reasons: string[];
 }
 
-/** Checks the id set, non-empty text and a sane length (≤ max(90, 1.3 × source)). */
-export function validateBatch(batch: SourceCue[], parsed: unknown): ValidationResult {
+/**
+ * Checks the id set, non-empty text and a sane length (≤ max(90, 1.3 × source)). With
+ * `verifySpeech`, short lines the model marks as not spoken are accepted as removed.
+ */
+export function validateBatch(
+  batch: SourceCue[],
+  parsed: unknown,
+  { verifySpeech = false }: { verifySpeech?: boolean } = {},
+): ValidationResult {
   const valid = new Map<number, TranslatedItem>();
   const reasons: string[] = [];
   const items = (parsed as { items?: unknown })?.items;
@@ -97,6 +124,10 @@ export function validateBatch(batch: SourceCue[], parsed: unknown): ValidationRe
       continue;
     }
     if (valid.has(id)) continue;
+    if (verifySpeech && raw.spoken === false && wordCount(src.text) <= MAX_REMOVABLE_WORDS) {
+      valid.set(id, { id, text: '', gender: 'u', removed: true });
+      continue;
+    }
     const text = typeof raw.text === 'string' ? normalizeText(raw.text) : '';
     const g = raw.speaker_gender;
     const gender: Gender = g === 'm' || g === 'f' ? g : 'u';
@@ -141,6 +172,11 @@ export interface TranslateOptions {
   batchSize: number;
   concurrency: number;
   useAudio: boolean;
+  /**
+   * The cues come from speech-to-text: let the model drop short lines it cannot hear in the audio
+   * (hallucinations). Only effective with audio.
+   */
+  verifySpeech?: boolean;
   /** Returns an MP3 clip for [startSec, endSec]. Required when useAudio is true. */
   loadAudio?: (startSec: number, endSec: number) => Promise<Buffer>;
   reasoningEffort: ReasoningEffort;
@@ -177,7 +213,9 @@ export async function translateCues(o: TranslateOptions): Promise<Map<number, Tr
       'warn',
       'The translation model does not accept audio; speaker gender will be inferred from text only',
     );
-  const system = (withAudio: boolean) => translationSystemPrompt(o.targetLanguage, withAudio);
+  const verify = (withAudio: boolean) => withAudio && !!o.verifySpeech;
+  const system = (withAudio: boolean) =>
+    translationSystemPrompt(o.targetLanguage, withAudio, verify(withAudio));
   let done = 0;
 
   const glossaryPayload = {
@@ -252,7 +290,7 @@ export async function translateCues(o: TranslateOptions): Promise<Map<number, Tr
           reasons: ['response was not valid JSON'],
         };
       }
-      return validateBatch(cues, parsed);
+      return validateBatch(cues, parsed, { verifySpeech: verify(withAudio) });
     } catch (err) {
       if (!isAbortError(err)) {
         o.onCall({

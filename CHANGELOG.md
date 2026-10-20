@@ -4,6 +4,10 @@ All notable changes to OSG are listed here. The project follows [Semantic Versio
 
 ## Unreleased
 
+- Much fewer invented lines from speech-to-text: music/sound-tag-only lines, multilingual credit lines and clusters of stock phrases (“Thank you.”, “Bye.”, “Merci.”) are removed, and the translation model drops short lines it cannot hear in the audio. On a music-heavy episode this cut invented lines from 134 to 58 in the first 16 minutes before audio verification.
+- 4 jobs run at the same time by default (1–8), adjustable right in the dashboard queue; changes apply immediately.
+- Open tabs recover after a server restart (reload with the new session token, reconnect live updates, “Reconnecting…” indicator).
+- Transcription logs when it starts and how many chunks run in parallel.
 - Delete subtitles from an episode's menu, for several selected episodes, or from the job page. Only the `.srt` OSG wrote is deleted; the translation can be kept in OSG.
 - Search in the file browser: filter the current folder instantly, or include subfolders (case- and accent-insensitive).
 - Jobs now prepare the audio before the character pass, so the log follows the stage timeline, and translation logs its progress batch by batch.

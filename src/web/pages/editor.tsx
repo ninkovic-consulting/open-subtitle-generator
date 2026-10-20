@@ -179,7 +179,14 @@ const CueRow = memo(function CueRow({
               t.edited && 'decoration-accent/60 underline decoration-dotted underline-offset-4',
             )}
           >
-            {t.text || <span className="text-faint">(empty)</span>}
+            {t.text ||
+              (row.source ? (
+                <span className="text-faint italic">
+                  Removed: nobody says this in the audio. Click to add text.
+                </span>
+              ) : (
+                <span className="text-faint">(empty)</span>
+              ))}
           </button>
         )}
       </div>
@@ -354,7 +361,7 @@ export function EditorPage() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['subtitles', id], queryFn: () => api.subtitles(id) });
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'fast' | 'edited' | 'unknown'>('all');
+  const [filter, setFilter] = useState<'all' | 'fast' | 'edited' | 'unknown' | 'removed'>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState(false);
   const [vttVersion, setVttVersion] = useState(0);
@@ -378,7 +385,8 @@ export function EditorPage() {
       if (filter === 'fast' && cps(r.target.text, r.target.startMs, r.target.endMs) <= CPS_LIMIT)
         return false;
       if (filter === 'edited' && !r.target.edited) return false;
-      if (filter === 'unknown' && r.target.speakerGender !== 'u') return false;
+      if (filter === 'unknown' && (r.target.speakerGender !== 'u' || !r.target.text)) return false;
+      if (filter === 'removed' && r.target.text) return false;
       if (!needle) return true;
       return (
         r.target.text.toLowerCase().includes(needle) ||
@@ -386,6 +394,7 @@ export function EditorPage() {
       );
     });
   }, [rows, search, filter]);
+  const removedCount = useMemo(() => rows.filter((r) => !r.target.text && r.source).length, [rows]);
   const fastCount = useMemo(
     () =>
       rows.filter((r) => cps(r.target.text, r.target.startMs, r.target.endMs) > CPS_LIMIT).length,
@@ -538,6 +547,9 @@ export function EditorPage() {
                 { value: 'fast', label: 'Too fast' },
                 { value: 'unknown', label: 'Gender ?' },
                 { value: 'edited', label: 'Edited' },
+                ...(removedCount
+                  ? [{ value: 'removed' as const, label: `Removed (${removedCount})` }]
+                  : []),
               ]}
             />
             <label className="flex items-center gap-2 text-sm text-muted">

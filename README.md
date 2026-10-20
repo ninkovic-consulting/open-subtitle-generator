@@ -67,12 +67,12 @@ One job turns one video into one subtitle file:
 
 1. **Probe** reads duration, audio tracks and subtitle tracks.
 2. **Timing source** is chosen, cheapest first: a sidecar `.srt` with the same name (`Ep.srt`, `Ep.en.srt`), then an embedded text subtitle track, otherwise speech-to-text.
-3. **Transcribe** extracts the audio track that matches the spoken language, cuts it at silences into chunks of about 10 minutes, transcribes them in parallel with word and segment timestamps, removes typical Whisper hallucinations (“Thanks for watching”, credit lines, repeated lines on silence) and builds readable cues.
+3. **Transcribe** extracts the audio track that matches the spoken language, cuts it at silences into chunks of about 10 minutes, transcribes them in parallel with word and segment timestamps, and builds readable cues. Only dialogue is kept: music notes, sound tags (`*Dramatic music*`, `[Screaming]`), credit lines in many languages (“Thanks for watching”, “Sous-titrage Société Radio-Canada”…) and clusters of the short phrases speech-to-text invents over music and noise (“Thank you.”, “Bye.”, “Merci.”) are removed.
 4. **Characters** sends the transcript once to build or extend the show's character sheet and glossary.
-5. **Translate** sends batches of about 40 cues with 8 lines of context before and 4 after, the glossary, and an audio clip of that part of the episode. Answers are validated (every line present, nothing empty, sensible length); failures are retried, split into smaller batches, retried without audio, and as a last resort the original line is kept and logged.
+5. **Translate** sends batches of about 40 cues with 8 lines of context before and 4 after, the glossary, and an audio clip of that part of the episode. When the lines come from speech-to-text, the model also listens for each short line and removes the ones nobody actually says. Answers are validated (every line present, nothing empty, sensible length); failures are retried, split into smaller batches, retried without audio, and as a last resort the original line is kept and logged.
 6. **Write** wraps lines, renders SRT with CRLF line endings, encodes it, and writes it atomically next to the video.
 
-Jobs are queued and survive restarts: when OSG starts again, unfinished jobs continue from the last completed stage without paying for transcription twice.
+Jobs are queued (4 at a time by default; change it in the dashboard queue or in Settings) and survive restarts: when OSG starts again, unfinished jobs continue from the last completed stage without paying for transcription twice, and open browser tabs reconnect by themselves.
 
 ## What it costs
 

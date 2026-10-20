@@ -299,6 +299,11 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
           `Planned ${chunks.length} chunk(s) at silences (${silences.length} silences detected)`,
         );
         const sttPricing = sttIsCustom ? null : await getModelPricing(sttModel, 'stt');
+        const parallel = Math.min(settings.sttConcurrency, chunks.length);
+        log(
+          'info',
+          `Transcribing ${Math.round(duration / 60)} min of audio with ${sttModel}: ${chunks.length} chunk(s), ${parallel} at a time. Each chunk takes about 30–60 s.`,
+        );
         const tr = await transcribeChunks({
           chunks,
           loadChunk: (c) => encodeMp3(wav, c.start, c.end, signal),
@@ -430,6 +435,8 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
           : languageName(initial.sourceLang);
       const items = await translateCues({
         all: sourceCues,
+        // Lines from speech-to-text may be invented; let the model drop short ones it cannot hear.
+        verifySpeech: job.timingSource === 'stt',
         targetLanguage: targetName,
         sourceLanguage,
         glossary,
@@ -479,7 +486,13 @@ export async function runPipeline(jobId: number, signal: AbortSignal): Promise<v
         };
       });
       saveSubtitle(jobId, 'translated', initial.targetLang, translated);
-      log('info', `Translated ${translated.length} cues`);
+      const removed = [...items.values()].filter((i) => i.removed).length;
+      log(
+        'info',
+        removed
+          ? `Translated ${translated.length - removed} cues; removed ${removed} line(s) nobody says in the audio (speech-to-text noise)`
+          : `Translated ${translated.length} cues`,
+      );
     } else {
       log('info', 'Translation already complete, skipping to write');
     }

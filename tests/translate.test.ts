@@ -155,3 +155,56 @@ describe('mergeGlossary', () => {
     expect(merged.styleNotes).toBe('casual');
   });
 });
+
+describe('audio verification of speech-to-text lines', () => {
+  const batch = [
+    { id: 1, startMs: 0, endMs: 1000, text: 'Thank you.' },
+    {
+      id: 2,
+      startMs: 2000,
+      endMs: 5000,
+      text: 'I was at the harbor all morning with your father, you know that.',
+    },
+  ];
+  const answer = {
+    items: [
+      { id: 1, spoken: false, speaker_gender: 'u', text: '' },
+      {
+        id: 2,
+        spoken: false,
+        speaker_gender: 'm',
+        text: 'Cijelo jutro sam bio u luci s tvojim ocem, znaš to.',
+      },
+    ],
+  };
+
+  it('removes short lines the model cannot hear, never long ones', () => {
+    const r = validateBatch(batch, answer, { verifySpeech: true });
+    expect(r.valid.get(1)).toMatchObject({ removed: true, text: '' });
+    expect(r.valid.get(2)).toMatchObject({
+      text: 'Cijelo jutro sam bio u luci s tvojim ocem, znaš to.',
+    });
+    expect(r.valid.get(2)!.removed).toBeUndefined();
+  });
+
+  it('ignores "spoken: false" when timing comes from real subtitles', () => {
+    const r = validateBatch(batch, answer, { verifySpeech: false });
+    expect(r.valid.has(1)).toBe(false); // empty text is invalid → retried
+    expect(r.invalid).toEqual([1]);
+  });
+
+  it('asks the model to verify only when audio is attached', async () => {
+    const log: FakeLog = { stt: [], chat: [] };
+    await translateCues({ ...base, chat: fakeChat(log), verifySpeech: true, useAudio: false });
+    expect(log.chat[0]!.messages[0]!.content).toContain('Always set spoken=true');
+    const log2: FakeLog = { stt: [], chat: [] };
+    await translateCues({
+      ...base,
+      chat: fakeChat(log2),
+      verifySpeech: true,
+      useAudio: true,
+      loadAudio: async () => Buffer.from('mp3'),
+    });
+    expect(log2.chat[0]!.messages[0]!.content).toContain('set spoken=false');
+  });
+});

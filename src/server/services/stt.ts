@@ -8,10 +8,10 @@ import {
 import type { Chunk } from './chunker.js';
 import type { JobLogger } from './joblog.js';
 
-/** Phrases Whisper hallucinates on silence/music (matched case-insensitively on the whole segment). */
+/** Credit lines speech-to-text models invent over music or silence, in many languages. */
 const FILLER_PATTERNS: RegExp[] = [
-  /thanks? (you )?for watching/i,
-  /please (like and )?subscribe/i,
+  /thanks? (you )?(so much |very much )?for watching/i,
+  /please (like (and|&) )?subscribe/i,
   /subtitles? (by|made by|created by)/i,
   /amara\.org/i,
   /subtitled by/i,
@@ -21,8 +21,17 @@ const FILLER_PATTERNS: RegExp[] = [
   /^\s*(\[|\()?\s*(music|applause|silence|blank_audio)\s*(\]|\))?\s*$/i,
   /hvala (vam )?(što ste|na) (gledali|gledanju)/i,
   /prevod(io|ila)? (i|&) obrad/i,
-  /untertitel (im auftrag|von)/i,
-  /sous-titres? (réalisés|par)/i,
+  /untertitel(ung)? (im auftrag|von|des|der)/i,
+  /sous-titr(es?|age) (réalisés|par|société|st'?\s*\d+)/i,
+  /société radio-canada/i,
+  /sottotitoli (creati|a cura|di)/i,
+  /napisy (wykonane|stworzone|przygotowane)/i,
+  /titulky (vytvořil|vytvořila|připravil)/i,
+  /ondertiteling (door|van)/i,
+  /субтитр(ы|ов) (сделал|подготов|создал)/i,
+  /продолжение следует/i,
+  /ご視聴ありがとうございました/,
+  /字幕(由|制作|提供)/,
   /^\s*\.+\s*$/,
 ];
 
@@ -32,20 +41,110 @@ export function isFiller(text: string): boolean {
   return FILLER_PATTERNS.some((re) => re.test(t));
 }
 
+const ANNOTATION_RE = /\*[^*\n]{0,60}\*|\[[^\]\n]{0,60}\]|\([^)\n]{0,60}\)|[♪♫🎵🎶]+/gu;
+const SOUND_WORD_RE =
+  /^(sighs?|sighing|laughs?|laughing|chuckles?|chuckling|grunts?|grunting|groans?|groaning|gasps?|gasping|screams?|screaming|coughs?|coughing|music|applause|silence|blank_audio|inaudible|indistinct|crying|sobbing|panting|breathing|growling|whistling|knocking|footsteps)$/i;
+
+/** Removes sound annotations (*Dramatic music*, [Screaming], (sighs), ♪) and dash-only leftovers. */
+export function stripAnnotations(text: string): string {
+  return text
+    .replace(ANNOTATION_RE, ' ')
+    .split('\n')
+    .map((l) =>
+      l
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+        .replace(/^(-\s*)+$/, '')
+        .replace(/^-\s*(-\s*)+/, '- '),
+    )
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+/** True when nobody says anything: only music notes, sound tags, sound words or punctuation. */
+export function isNonSpeech(text: string): boolean {
+  const words = stripAnnotations(text)
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.length === 0 || words.every((w) => SOUND_WORD_RE.test(w));
+}
+
+/** Short phrases Whisper is known to invent over music, noise or foreign speech. */
+const STOCK_PHRASES = [
+  'thank you very much',
+  'thank you so much',
+  'merci beaucoup',
+  'thank you',
+  'bye bye',
+  "i'm sorry",
+  'goodbye',
+  'thanks',
+  'bye',
+  'you',
+  'merci',
+  'amen',
+  'gracias',
+  'danke',
+  'grazie',
+  'obrigado',
+  'hvala',
+].map((p) => p.split(' '));
+
+/** "Thank you.", "Thank you. Thank you.", "you Thank you." … (any repetition of stock phrases). */
+export function isStockPhrase(text: string): boolean {
+  const tokens = stripAnnotations(text)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return false;
+  let i = 0;
+  outer: while (i < tokens.length) {
+    for (const p of STOCK_PHRASES) {
+      if (p.every((w, k) => tokens[i + k] === w)) {
+        i += p.length;
+        continue outer;
+      }
+    }
+    return false;
+  }
+  return true;
+}
+
+export interface FilterStats {
+  nonSpeech: number;
+  credits: number;
+  stock: number;
+  repeated: number;
+  lowConfidence: number;
+}
+
 /**
- * Removes typical Whisper hallucinations: low-confidence non-speech segments, credit/filler phrases,
- * and runs of ≥ 3 identical consecutive segments (keeps the first).
+ * Removes what nobody says: music/sound-tag-only segments, credit lines, low-confidence
+ * non-speech, runs of ≥ 3 identical segments, and stock phrases ("Thank you.", "Bye.", "Merci.")
+ * that are stretched over several seconds or appear in clusters (≥ 3 suspicious segments within
+ * 15 s). Sound annotations are stripped from the kept text.
  */
 export function filterHallucinations(segments: SttSegment[]): {
   kept: SttSegment[];
   dropped: number;
+  stats: FilterStats;
 } {
-  const kept: SttSegment[] = [];
-  let dropped = 0;
+  const stats: FilterStats = { nonSpeech: 0, credits: 0, stock: 0, repeated: 0, lowConfidence: 0 };
+  const sorted = [...segments].sort((a, b) => a.start - b.start);
+  type Mark = {
+    seg: SttSegment;
+    text: string;
+    drop: keyof FilterStats | null;
+    suspicious: boolean;
+  };
+  const marks: Mark[] = [];
   let runText = '';
   let runCount = 0;
-  for (const seg of segments) {
-    const text = seg.text.trim();
+  for (const seg of sorted) {
+    const text = stripAnnotations(seg.text);
     const norm = text
       .toLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
@@ -55,15 +154,32 @@ export function filterHallucinations(segments: SttSegment[]): {
       runText = norm;
       runCount = 1;
     }
-    const noSpeech = (seg.noSpeechProb ?? 0) > 0.6 && (seg.avgLogprob ?? 0) < -1;
-    if (noSpeech || isFiller(text) || runCount >= 3) {
-      dropped++;
-      continue;
-    }
+    let drop: keyof FilterStats | null = null;
+    if (isNonSpeech(seg.text)) drop = 'nonSpeech';
+    else if (isFiller(text)) drop = 'credits';
+    else if ((seg.noSpeechProb ?? 0) > 0.6 && (seg.avgLogprob ?? 0) < -1) drop = 'lowConfidence';
     // Two identical in a row are allowed ("No. No."), the third onwards is dropped.
-    kept.push(seg);
+    else if (runCount >= 3) drop = 'repeated';
+    const stock = drop === null && isStockPhrase(text);
+    marks.push({ seg, text, drop, suspicious: drop !== null || stock });
   }
-  return { kept, dropped };
+  for (let i = 0; i < marks.length; i++) {
+    const m = marks[i]!;
+    if (m.drop || !isStockPhrase(m.text)) continue;
+    const stretched = m.seg.end - m.seg.start > 3.5;
+    let neighbours = 0;
+    for (let j = 0; j < marks.length; j++) {
+      if (j !== i && marks[j]!.suspicious && Math.abs(marks[j]!.seg.start - m.seg.start) <= 15)
+        neighbours++;
+    }
+    if (stretched || neighbours >= 2) m.drop = 'stock';
+  }
+  const kept: SttSegment[] = [];
+  for (const m of marks) {
+    if (m.drop) stats[m.drop]++;
+    else kept.push({ ...m.seg, text: m.text });
+  }
+  return { kept, dropped: marks.length - kept.length, stats };
 }
 
 /** Keeps only words that fall inside a kept segment. */
@@ -260,8 +376,17 @@ export async function transcribeChunks(o: TranscribeOptions): Promise<Transcribe
 
   const allSegments = perChunk.flatMap((c) => c.segments).sort((a, b) => a.start - b.start);
   const allWords = perChunk.flatMap((c) => c.words).sort((a, b) => a.start - b.start);
-  const { kept, dropped } = filterHallucinations(allSegments);
-  if (dropped > 0) o.log('info', `Hallucination filter removed ${dropped} segment(s)`);
+  const { kept, dropped, stats } = filterHallucinations(allSegments);
+  if (dropped > 0) {
+    const parts = [
+      stats.nonSpeech && `${stats.nonSpeech} music/sound-only`,
+      stats.stock && `${stats.stock} invented stock phrases ("Thank you." …)`,
+      stats.credits && `${stats.credits} credit lines`,
+      stats.repeated && `${stats.repeated} repeats`,
+      stats.lowConfidence && `${stats.lowConfidence} low-confidence`,
+    ].filter(Boolean);
+    o.log('info', `Removed ${dropped} segment(s) nobody says: ${parts.join(', ')}`);
+  }
   return {
     segments: kept,
     words: filterWords(allWords, kept),

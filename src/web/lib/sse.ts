@@ -1,8 +1,29 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import type { Job, JobLog, ServerEvent } from '@shared/types';
-import { tokenUrl } from './api';
+import { checkSession, reloadForNewSession, tokenUrl } from './api';
+
+/** `idle` before the first connection, then `live` or `reconnecting`. */
+export type ConnectionState = 'idle' | 'live' | 'reconnecting';
+
+let connection: ConnectionState = 'idle';
+const listeners = new Set<() => void>();
+function setConnection(next: ConnectionState) {
+  if (connection === next) return;
+  connection = next;
+  listeners.forEach((l) => l());
+}
+
+export function useConnectionState(): ConnectionState {
+  return useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    () => connection,
+  );
+}
 
 function upsertJob(list: { jobs: Job[] } | undefined, job: Job): { jobs: Job[] } | undefined {
   if (!list) return list;
@@ -30,8 +51,7 @@ export function useServerEvents(): void {
   const qc = useQueryClient();
   useEffect(() => {
     const statuses = new Map<number, Job['status']>();
-    const es = new EventSource(tokenUrl('/api/events'));
-    es.onmessage = (msg) => {
+    const onMessage = (msg: MessageEvent) => {
       const event = JSON.parse(msg.data as string) as ServerEvent;
       if (event.type === 'job.update') {
         const { job } = event;
@@ -65,6 +85,38 @@ export function useServerEvents(): void {
         invalidateSoon(qc);
       }
     };
-    return () => es.close();
+
+    let es: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+    let dropped = false;
+    const connect = () => {
+      es = new EventSource(tokenUrl('/api/events'));
+      es.onmessage = onMessage;
+      es.onopen = () => {
+        setConnection('live');
+        // Events may have been missed while disconnected: refetch everything once.
+        if (dropped) void qc.invalidateQueries();
+        dropped = false;
+      };
+      es.onerror = () => {
+        dropped = true;
+        if (connection === 'live') setConnection('reconnecting');
+        if (es?.readyState !== EventSource.CLOSED) return; // the browser retries by itself
+        // Closed for good: either the server restarted (new token) or it is still down.
+        es.close();
+        void checkSession().then((state) => {
+          if (disposed) return;
+          if (state === 'expired') reloadForNewSession();
+          else retry = setTimeout(connect, 2000);
+        });
+      };
+    };
+    connect();
+    return () => {
+      disposed = true;
+      es?.close();
+      if (retry) clearTimeout(retry);
+    };
   }, [qc]);
 }

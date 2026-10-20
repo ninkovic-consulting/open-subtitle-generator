@@ -599,14 +599,23 @@ export function SettingsPage() {
           </p>
         </div>
         <div className="grid gap-5 sm:grid-cols-3">
-          <Field label="Jobs at the same time" htmlFor="perf-jobs">
+          <Field
+            label="Jobs at the same time"
+            htmlFor="perf-jobs"
+            hint="Episodes processed in parallel (1–8). Also adjustable in the dashboard queue."
+          >
             <Input
               id="perf-jobs"
               type="number"
               min={1}
-              max={4}
+              max={8}
               value={draft.jobConcurrency}
-              onChange={(e) => setDraft((d) => void (d.jobConcurrency = NUM(e.target.value, 1)))}
+              onChange={(e) =>
+                setDraft(
+                  (d) =>
+                    void (d.jobConcurrency = NUM(e.target.value, DEFAULT_SETTINGS.jobConcurrency)),
+                )
+              }
             />
           </Field>
           <Field label="Parallel speech-to-text chunks" htmlFor="perf-stt">
@@ -616,7 +625,12 @@ export function SettingsPage() {
               min={1}
               max={16}
               value={draft.sttConcurrency}
-              onChange={(e) => setDraft((d) => void (d.sttConcurrency = NUM(e.target.value, 4)))}
+              onChange={(e) =>
+                setDraft(
+                  (d) =>
+                    void (d.sttConcurrency = NUM(e.target.value, DEFAULT_SETTINGS.sttConcurrency)),
+                )
+              }
             />
           </Field>
           <Field label="Parallel translation batches" htmlFor="perf-tr">
@@ -627,7 +641,13 @@ export function SettingsPage() {
               max={16}
               value={draft.translateConcurrency}
               onChange={(e) =>
-                setDraft((d) => void (d.translateConcurrency = NUM(e.target.value, 6)))
+                setDraft(
+                  (d) =>
+                    void (d.translateConcurrency = NUM(
+                      e.target.value,
+                      DEFAULT_SETTINGS.translateConcurrency,
+                    )),
+                )
               }
             />
           </Field>

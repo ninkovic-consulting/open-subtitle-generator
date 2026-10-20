@@ -64,7 +64,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<App> {
     return reply.code(status).send({ error: (err as Error).message || 'Internal error' });
   });
 
-  await app.register(settingsRoutes);
+  await app.register(settingsRoutes, { queue });
   await app.register(fsRoutes);
   await app.register(projectRoutes);
   await app.register(jobRoutes, { queue });
