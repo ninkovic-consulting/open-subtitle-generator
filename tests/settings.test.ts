@@ -14,9 +14,13 @@ beforeAll(() => {
 });
 
 describe('settings', () => {
-  it('starts with OpenRouter + Whisper + Gemini defaults', () => {
+  it('starts with OpenRouter + Qwen3-ASR (Whisper fallback) + Gemini defaults', () => {
     const s = loadSettings();
-    expect(s.stt).toMatchObject({ provider: 'openrouter', model: 'openai/whisper-large-v3' });
+    expect(s.stt).toMatchObject({
+      provider: 'openrouter',
+      model: 'qwen/qwen3-asr-1.7b',
+      fallbackModel: 'openai/whisper-large-v3',
+    });
     expect(s.translation).toMatchObject({
       provider: 'openrouter',
       model: 'google/gemini-3.1-flash-lite',

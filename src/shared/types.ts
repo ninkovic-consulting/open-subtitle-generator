@@ -79,7 +79,9 @@ export type SttProviderSettings = z.infer<typeof sttProviderSchema>;
 export type ChatProviderSettings = z.infer<typeof chatProviderSchema>;
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3';
+/** Qwen3-ASR: same price as Whisper, far fewer invented lines over music and noise. */
+export const DEFAULT_STT_MODEL = 'qwen/qwen3-asr-1.7b';
+export const FALLBACK_STT_MODEL = 'openai/whisper-large-v3';
 export const DEFAULT_TRANSLATE_MODEL = 'google/gemini-3.1-flash-lite';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -87,7 +89,7 @@ export const DEFAULT_SETTINGS: Settings = {
   stt: {
     provider: 'openrouter',
     model: DEFAULT_STT_MODEL,
-    fallbackModel: 'qwen/qwen3-asr-1.7b',
+    fallbackModel: FALLBACK_STT_MODEL,
     baseUrl: '',
     apiKey: '',
   },

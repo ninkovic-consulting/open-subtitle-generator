@@ -95,7 +95,7 @@ interface OpenAiTranscription {
   words?: { start: number; end: number; word: string }[];
 }
 
-/** Whisper returns language names ("english") in verbose_json; normalise common ones to ISO codes. */
+/** Whisper and Qwen3-ASR return language names ("english"); normalise common ones to ISO codes. */
 const LANGUAGE_NAMES: Record<string, string> = {
   english: 'en',
   croatian: 'hr',

@@ -1,6 +1,7 @@
 import { OpenRouter } from '@openrouter/sdk';
 import type { ChatRequest as ORChatRequest } from '@openrouter/sdk/models';
 import { config } from '../config.js';
+import { normalizeLanguage } from './openai-compatible.js';
 import {
   ProviderError,
   isAbortError,
@@ -70,7 +71,7 @@ export class OpenRouterStt implements SttProvider {
       );
       return {
         text: res.text ?? '',
-        language: res.language,
+        language: normalizeLanguage(res.language),
         duration: res.duration,
         segments: (res.segments ?? []).map((s) => ({
           start: s.start,

@@ -59,8 +59,8 @@ One job turns one video into one subtitle file:
 
 ```
  video ──► 1 Probe ──► 2 Audio ──► 3 Transcribe ──► 4 Characters ──► 5 Translate ──► 6 Write ──► Episode.hr.srt
-            ffprobe     ffmpeg      Whisper           character        LLM + audio      wrap,
-            tracks,     mono 16 kHz silence chunks,   sheet and        clips, batches   encode,
+            ffprobe     ffmpeg      Qwen3-ASR /       character        LLM + audio      wrap,
+            tracks,     mono 16 kHz Whisper, chunks,  sheet and        clips, batches   encode,
             duration    WAV          word timestamps  glossary         of 40 lines      atomic write
                                     (skipped when an existing subtitle can be used)
 ```
@@ -76,7 +76,7 @@ Jobs are queued (4 at a time by default; change it in the dashboard queue or in 
 
 ## What it costs
 
-With the defaults (`openai/whisper-large-v3` and `google/gemini-3.1-flash-lite` via OpenRouter):
+With the defaults (`qwen/qwen3-asr-1.7b` and `google/gemini-3.1-flash-lite` via OpenRouter):
 
 | 45-minute episode                                            | Speech-to-text | Translation with audio | Total            |
 | ------------------------------------------------------------ | -------------- | ---------------------- | ---------------- |
@@ -136,10 +136,12 @@ Copy `.env.example` to `.env` and fill in `OPENROUTER_API_KEY=…` (the alias `O
 
 **Defaults** (restored any time with **Reset to defaults**):
 
-| Step           | Provider   | Model                          | Notes                                                       |
-| -------------- | ---------- | ------------------------------ | ----------------------------------------------------------- |
-| Speech-to-text | OpenRouter | `openai/whisper-large-v3`      | Word + segment timestamps. Fallback: `qwen/qwen3-asr-1.7b`. |
-| Translation    | OpenRouter | `google/gemini-3.1-flash-lite` | Accepts audio, structured JSON output, very low price.      |
+| Step           | Provider   | Model                          | Notes                                                                                                     |
+| -------------- | ---------- | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Speech-to-text | OpenRouter | `qwen/qwen3-asr-1.7b`          | Word + segment timestamps, rarely invents lines over music or noise. Fallback: `openai/whisper-large-v3`. |
+| Translation    | OpenRouter | `google/gemini-3.1-flash-lite` | Accepts audio, structured JSON output, very low price.                                                    |
+
+Why Qwen3-ASR rather than Whisper: on a music-heavy, 16-minute stretch of a real episode, scored against the official subtitles, both covered nearly the same dialogue (89 vs 90 of 94 lines) at the same price, but Whisper invented 134 lines that nobody says ("Thank you." over music, credit lines over background chatter), while Qwen3-ASR's extra lines were almost all real background speech. Whisper stays as the automatic fallback and can be selected any time.
 
 The model pickers list the current OpenRouter catalog with prices, so you can switch to any other transcription or chat model. Models that accept audio are marked.
 

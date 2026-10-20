@@ -127,7 +127,7 @@ describe('custom OpenAI-compatible endpoints (local models)', () => {
     }>('POST', '/api/settings/reset', { scope: 'providers' });
     expect(res.settings.stt).toMatchObject({
       provider: 'openrouter',
-      model: 'openai/whisper-large-v3',
+      model: 'qwen/qwen3-asr-1.7b',
     });
     expect(res.settings.translation).toMatchObject({
       provider: 'openrouter',

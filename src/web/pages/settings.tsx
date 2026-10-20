@@ -383,8 +383,8 @@ function LocalModelsGuide() {
         </div>
         <p className="max-w-prose text-muted">
           Mix and match freely, e.g. local Whisper for speech-to-text and Gemini on OpenRouter for
-          translation. “Reset to defaults” brings back OpenRouter with Whisper large-v3 and Gemini
-          3.1 Flash Lite.
+          translation. “Reset to defaults” brings back OpenRouter with Qwen3-ASR (Whisper as
+          fallback) and Gemini 3.1 Flash Lite.
         </p>
       </div>
     </details>
@@ -762,7 +762,7 @@ export function SettingsPage() {
           title={confirmReset === 'providers' ? 'Reset AI providers?' : 'Reset all settings?'}
           description={
             confirmReset === 'providers'
-              ? 'Speech-to-text and translation go back to OpenRouter with Whisper large-v3 and Gemini 3.1 Flash Lite. Custom endpoint addresses and keys are cleared. Your OpenRouter key is kept.'
+              ? 'Speech-to-text and translation go back to OpenRouter with Qwen3-ASR (Whisper large-v3 as fallback) and Gemini 3.1 Flash Lite. Custom endpoint addresses and keys are cleared. Your OpenRouter key is kept.'
               : 'Every setting goes back to its default. Your OpenRouter key, projects and history are kept.'
           }
         >

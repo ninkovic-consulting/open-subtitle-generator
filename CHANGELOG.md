@@ -4,6 +4,7 @@ All notable changes to OSG are listed here. The project follows [Semantic Versio
 
 ## Unreleased
 
+- Default speech-to-text model is now `qwen/qwen3-asr-1.7b` (same price as Whisper, far fewer invented lines over music and noise); `openai/whisper-large-v3` is the fallback. Language names returned by the model ("english") are normalised to ISO codes.
 - Much fewer invented lines from speech-to-text: music/sound-tag-only lines, multilingual credit lines and clusters of stock phrases (“Thank you.”, “Bye.”, “Merci.”) are removed, and the translation model drops short lines it cannot hear in the audio. On a music-heavy episode this cut invented lines from 134 to 58 in the first 16 minutes before audio verification.
 - 4 jobs run at the same time by default (1–8), adjustable right in the dashboard queue; changes apply immediately.
 - Open tabs recover after a server restart (reload with the new session token, reconnect live updates, “Reconnecting…” indicator).

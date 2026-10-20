@@ -1,5 +1,6 @@
 import {
   DEFAULT_STT_MODEL,
+  FALLBACK_STT_MODEL,
   DEFAULT_TRANSLATE_MODEL,
   OPENROUTER_BASE_URL,
   type ModelInfo,
@@ -22,6 +23,16 @@ interface RawModel {
 const FALLBACK: Record<string, ModelInfo> = {
   [DEFAULT_STT_MODEL]: {
     id: DEFAULT_STT_MODEL,
+    name: 'Qwen3-ASR 1.7B',
+    promptPrice: 0.0000075,
+    completionPrice: 0,
+    audioPrice: null,
+    audioInput: true,
+    structuredOutput: false,
+    contextLength: null,
+  },
+  [FALLBACK_STT_MODEL]: {
+    id: FALLBACK_STT_MODEL,
     name: 'Whisper Large v3',
     promptPrice: 0.0000075,
     completionPrice: 0,
@@ -95,9 +106,8 @@ export async function getOpenRouterModels(
     return models;
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'Could not fetch OpenRouter model list');
-    return Object.values(FALLBACK).filter((m) =>
-      kind === 'stt' ? m.id === DEFAULT_STT_MODEL : m.id !== DEFAULT_STT_MODEL,
-    );
+    const sttIds = [DEFAULT_STT_MODEL, FALLBACK_STT_MODEL];
+    return Object.values(FALLBACK).filter((m) => sttIds.includes(m.id) === (kind === 'stt'));
   }
 }
 
