@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+tests/fixtures/generated/
+*.db
+*.db-shm
+*.db-wal
+.data/

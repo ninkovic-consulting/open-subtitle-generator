@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Job log
+      description: Open the job, choose “Log”, click “Copy” and paste it here. Remove anything private.
+      render: text
+  - type: input
+    id: providers
+    attributes:
+      label: Providers and models
+      placeholder: e.g. OpenRouter · openai/whisper-large-v3 + google/gemini-3.1-flash-lite, or Speaches + Ollama gemma3:12b
+  - type: input
+    id: file
+    attributes:
+      label: Video format
+      placeholder: e.g. MKV, H.264 + AC3 5.1, 45 min, embedded PGS subtitles
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node.js and OSG version
+      placeholder: e.g. macOS 15, Node 22.12, OSG 0.1.0
+    validations:
+      required: true
